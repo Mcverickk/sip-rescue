@@ -59,7 +59,7 @@ h1, h2, h3, p { margin: 0; }
 
 /* ---------------------------------------------------------------- layout */
 .stage { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(360px, 420px) minmax(300px, 1fr); gap: 28px; padding: 10px 28px 32px; align-items: start; }
-@media (max-width: 1150px) { .stage { grid-template-columns: 1fr; } .call-col { order: -1; } .top { grid-template-columns: 1fr; } .acts { justify-content: flex-start; flex-wrap: wrap; } }
+@media (max-width: 1150px) { .stage { grid-template-columns: 1fr; } .call-col { order: -1; position: static; } .top { grid-template-columns: 1fr; } .acts { justify-content: flex-start; flex-wrap: wrap; } }
 
 /* ---------------------------------------------------------------- act 1: story */
 .story { display: grid; gap: 14px; }
@@ -111,8 +111,8 @@ h1, h2, h3, p { margin: 0; }
 .verdict.show { display: flex; gap: 14px; align-items: center; }
 
 /* ---------------------------------------------------------------- act 2: phone */
-.call-col { display: grid; gap: 18px; justify-items: center; position: sticky; top: 12px; }
-.phone { position: relative; height: clamp(600px, calc(100vh - 200px), 790px); width: auto; max-width: 100%; aspect-ratio: 9 / 18.5; border-radius: 48px; background: var(--night); border: 10px solid #0d1236; box-shadow: 0 30px 60px rgba(22, 32, 92, .35); overflow: hidden; color: #fff; }
+.call-col { display: grid; gap: 18px; justify-items: center; position: sticky; top: 12px; min-width: 0; }
+.phone { position: relative; width: min(100%, 384px, max(292px, calc((100vh - 200px) * 0.486))); height: auto; aspect-ratio: 9 / 18.5; border-radius: 48px; background: var(--night); border: 10px solid #0d1236; box-shadow: 0 30px 60px rgba(22, 32, 92, .35); overflow: hidden; color: #fff; }
 .sky { position: absolute; inset: 0; background: linear-gradient(180deg, #121a52 0%, #2b2a78 45%, #6b3fa0 75%, #f08a3c 100%); }
 .stars { position: absolute; inset: 0 0 40% 0; background-image: radial-gradient(1.5px 1.5px at 20% 15%, #fff 99%, transparent), radial-gradient(1px 1px at 70% 22%, #fff 99%, transparent), radial-gradient(1.5px 1.5px at 45% 8%, #fff 99%, transparent), radial-gradient(1px 1px at 85% 40%, #fff 99%, transparent), radial-gradient(1px 1px at 12% 45%, #fff 99%, transparent), radial-gradient(1.2px 1.2px at 58% 34%, #fff 99%, transparent); opacity: .8; }
 .moon { position: absolute; top: 9%; right: 14%; width: 34px; height: 34px; border-radius: 50%; box-shadow: -9px 4px 0 0 #ffe7a8; }
@@ -152,7 +152,8 @@ h1, h2, h3, p { margin: 0; }
 .bars { display: flex; gap: 4px; align-items: center; height: 30px; margin: 4px 0 6px; }
 .bars i { width: 5px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .8); transition: height .08s; }
 .phone.listening .bars i { background: var(--marigold); }
-.captions { width: 100%; flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; scrollbar-width: none; }
+.captions { width: 100%; flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; scrollbar-width: none; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px); mask-image: linear-gradient(to bottom, transparent 0, #000 28px); }
+.captions::before { content: ""; margin-top: auto; } /* bottom-align without clipping the top */
 .cap-sia { font-size: 18px; font-weight: 600; line-height: 1.35; text-shadow: 0 1px 8px rgba(0, 0, 0, .25); }
 .cap-sia:empty::before { content: "…"; opacity: .6; }
 .cap-you { align-self: flex-end; max-width: 90%; background: rgba(255, 255, 255, .92); color: var(--ink); border-radius: 18px 18px 4px 18px; padding: 6px 12px; font-size: 16px; }
@@ -231,7 +232,7 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* ---------------------------------------------------------------- live language + typing */
-.heard-lang { display: flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, .16); border-radius: 99px; padding: 2px 4px 2px 12px; font-size: 13px; animation: pop .4s cubic-bezier(.2, 1.6, .4, 1); }
+.heard-lang { display: flex; align-items: center; gap: 6px; white-space: nowrap; background: rgba(255, 255, 255, .16); border-radius: 99px; padding: 2px 4px 2px 12px; font-size: 13px; animation: pop .4s cubic-bezier(.2, 1.6, .4, 1); }
 .heard-lang b { background: var(--marigold); color: var(--night); border-radius: 99px; padding: 1px 10px; font-size: 15px; }
 .type-row { width: 100%; margin: 8px 0; }
 .type-row input { width: 100%; border: 0; border-radius: 99px; padding: 8px 14px; font: inherit; font-size: 15px; background: rgba(255, 255, 255, .92); color: var(--ink); }

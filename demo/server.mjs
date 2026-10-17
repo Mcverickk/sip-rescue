@@ -4,7 +4,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { sarvamEnabled, stt, tts, ttsPath, languageOfText, LANGUAGES, NATIVE } from "./sarvam.mjs";
+import { sarvamEnabled, stt, tts, ttsPath, languageOfText, textLanguage, LANGUAGES, NATIVE } from "./sarvam.mjs";
 import { api, fixture, reset, snapshot } from "./mockApi.mjs";
 import { startSession, turn, endCallManually, engineName, claudeReady, currentLang } from "./agent.mjs";
 
@@ -94,7 +94,8 @@ const server = http.createServer(async (req, res) => {
       const { text } = await readJson(req);
       return streamTurn(res, async (write) => {
         const scriptLang = languageOfText(String(text || ""), currentLang());
-        const lang = scriptLang === "en-IN" ? currentLang() : scriptLang;
+        let lang = scriptLang;
+        if (scriptLang === "en-IN") lang = (sarvamEnabled() && (await textLanguage(String(text)).catch(() => null))) || currentLang();
         write({ type: "heard", transcript: String(text || ""), language_code: lang, language: LANGUAGES[lang], native: NATIVE[lang], typed: true });
         return { text: String(text || ""), lang };
       });

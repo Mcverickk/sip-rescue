@@ -55,8 +55,8 @@ function record(method, pathStr, request, response, status = 200) {
   return entry;
 }
 
-function sendSms(text, override) {
-  if (override) text = override;
+function sendSms(text, override, link) {
+  if (override) text = link && !override.includes(link) ? override.replace(/\s*-\s*Bachatt\s*$/i, "") + ` ${link} - Bachatt` : override;
   const u = fixture.user;
   const msg = { to: u.mobile_masked, sender: "AX-BACHTT-S", text, at: ist() };
   state.sms.push(msg);
@@ -75,7 +75,7 @@ export const api = {
     record("POST", "/internal/v1/users/" + u.user_id + "/topup-link",
       { amount_inr: amount, bank: b.name, acct_last4: b.acct_last4, reason: "SIP_PRE_DEBIT_LOW_BALANCE" },
       { link_id: "tl_" + Math.random().toString(36).slice(2, 10), deeplink: link, upi_intent: `upi://pay?am=${amount}&tn=Add%20money%20to%20BOB%20XX${b.acct_last4}`, expires_at: addDays("2026-10-13", 1) + " 08:00:00", follow_up: "VERIFY_DEBIT_2026-10-14" });
-    sendSms(`Murari ji, ${b.name} a/c XX${b.acct_last4} mein ${amount} rupaye add karein taaki kal subah ka 100 rupaye ka Smart Deposit SIP safal ho. Link: ${link} - Bachatt`, _sms);
+    sendSms(`Murari ji, ${b.name} a/c XX${b.acct_last4} mein ${amount} rupaye add karein taaki kal subah ka 100 rupaye ka Smart Deposit SIP safal ho. Link: ${link} - Bachatt`, _sms, link);
     return { ok: true, link, amount_inr: amount, note: "Link sent by SMS. Debit will be verified tomorrow morning." };
   },
 
@@ -106,7 +106,7 @@ export const api = {
     state.plans.push(pending);
     record("POST", `/internal/v1/sips/${old.sip_plan_id}/change-bank`, { reason: "REPEATED_INSUFFICIENT_FUNDS", source: "SIP_RESCUE_AGENT" },
       { new_plan: pending, mandate_setup_link: link, old_plan_status: "ACTIVE until new mandate is approved" });
-    sendSms(`Murari ji, naye bank account se SIP jodne ke liye yeh link kholein aur UPI AutoPay approve karein: ${link} - Bachatt`, _sms);
+    sendSms(`Murari ji, naye bank account se SIP jodne ke liye yeh link kholein aur UPI AutoPay approve karein: ${link} - Bachatt`, _sms, link);
     return { ok: true, mandate_setup_link: link, note: "Old plan keeps running until the new mandate is approved." };
   },
 

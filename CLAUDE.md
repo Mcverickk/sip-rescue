@@ -57,8 +57,10 @@ Demo path: Run tonight's check, Call Murari, Answer, then just talk in any India
 
 ## How a turn works
 
+0. Sia's greeting is generated while the phone rings, so she speaks the instant it's answered.
 1. The browser records until Murari pauses (0.75 s of silence) and posts the audio to
-   `/api/call/voice`.
+   `/api/call/voice`. Typed text goes to `/api/call/text`; its language comes from Sarvam text-lid,
+   which tells English apart from romanized Hindi.
 2. Sarvam `saaras:v4` with `language_code: unknown` returns the transcript and its language
    (about 0.5 s). The server streams a `heard` event so the caption and language badge appear.
 3. Claude (`agent.mjs`) gets `<customer lang="ta-IN">…</customer>` and streams its reply. It starts
@@ -66,8 +68,14 @@ Demo path: Run tonight's check, Call Murari, Answer, then just talk in any India
    speaking. Text is cut into sentences as it streams.
 4. Each sentence is sent to Sarvam TTS immediately; sentences are delivered to the browser in order
    with their audio URLs and played back-to-back. The voice is picked from the sentence's script.
-5. Tool calls run the mocked APIs (Claude writes the confirmation SMS in the call's language) and
-   stream `action` events that update the "What changed" panel. `end_call` ends the call.
+5. Tool calls run the mocked APIs (Claude writes the confirmation SMS in the call's language; the
+   real link is appended) and stream `action` events that update the "What changed" panel.
+   `end_call` ends the call, but never silently: if Claude hung up without speaking, it is asked for
+   the goodbye first.
+
+Measured with Claude Opus 5 at low effort: first audio of a reply arrives 1.2 to 2.6 s after Murari
+stops talking (Sarvam STT ~0.5 s, Claude first sentence ~1.5 s, Sarvam TTS of a short opener
+~0.5 s). Each reply opens with a two-to-five-word sentence so the first audio is quick.
 
 Voices (`sarvam.mjs`): `ishita_enhi_customer` for Hindi/Hinglish, `simran_en_conversation`,
 `roopa_bn_conversational`, `pooja_gu_customer`, `chaitra_kn_conversation`, `kavitha_te_conversation`,

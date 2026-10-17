@@ -89,3 +89,9 @@ export async function stt(buf, mime) {
   const code = LANGUAGES[d.language_code] ? d.language_code : "hi-IN";
   return { transcript: (d.transcript || "").trim(), language_code: code, language: LANGUAGES[code], native: NATIVE[code], confidence: d.language_probability ?? null };
 }
+
+// Language of typed text (tells English apart from romanized Hindi like "haan boliye").
+export async function textLanguage(text) {
+  const d = await call("/text-lid", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ input: text }) });
+  return LANGUAGES[d.language_code] ? d.language_code : null;
+}

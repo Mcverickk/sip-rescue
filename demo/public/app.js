@@ -92,9 +92,11 @@ async function ringtone() {
   }
 }
 
+let greeting = null; // Sia's greeting is prepared while the phone rings, so she speaks the moment he answers
 function callMurari() {
   $("callBtn").hidden = true;
   setPhase("incoming");
+  greeting = fetch("/api/call/start", { method: "POST" });
   ringtone();
 }
 
@@ -107,11 +109,13 @@ async function answer() {
   getCtx().resume().catch(() => {}); // unlock audio on this click
   micReady = ensureMic();             // don't block the call on the permission prompt
   showYou("Hello?");
-  await runTurn(fetch("/api/call/start", { method: "POST" }));
+  await runTurn(greeting || fetch("/api/call/start", { method: "POST" }));
+  greeting = null;
 }
 
 function decline() {
   ringStop = true;
+  greeting = null;
   setPhase("lock");
   $("callBtn").hidden = false;
 }
@@ -186,7 +190,7 @@ async function runTurn(responsePromise, { fromVoice = false } = {}) {
 async function playItem(item) {
   setSia($("capSia").textContent === "" && phase === "call" && !lastLang ? "hello" : "speaking");
   $("capSia").textContent = ($("capSia").textContent + " " + item.text).trim();
-  $("captions").scrollTop = $("captions").scrollHeight;
+  requestAnimationFrame(() => ($("captions").scrollTop = $("captions").scrollHeight));
   await speak(item.audio, item.text, item.lang);
 }
 
@@ -237,7 +241,7 @@ function setInputs(on) {
 
 const ORDER = ["topup", "reduce", "bank", "pause"];
 function updateLadder(stage) {
-  const s = stage === "cancel_pushback" ? "pause" : stage;
+  const s = { cancel_pushback: "pause", explain: "topup" }[stage] || stage; // the explanation ends with offer 1
   if (!ORDER.includes(s)) return;
   ORDER.slice(0, ORDER.indexOf(s)).forEach((k) => { if (rung[k] === "offered") rung[k] = "declined"; });
   if (!rung[s]) rung[s] = "offered";

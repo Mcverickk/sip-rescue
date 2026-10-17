@@ -24,7 +24,7 @@ function getClient() {
 // ---------------------------------------------------------------------------- tools (mocked APIs)
 // Inputs are tiny, so tool-input streaming stays off and the API validates them for us.
 
-const smsField = { type: "string", description: "Confirmation SMS to Murari, in the language of the call, under 160 characters, signed '- Bachatt'." };
+const smsField = { type: "string", description: "Confirmation SMS to Murari, in the language of the call, under 140 characters, signed '- Bachatt'. Do not write any link or URL; the real link is added automatically." };
 const TOOLS = [
   {
     name: "send_topup_link",
@@ -93,11 +93,13 @@ const SYSTEM = `You are Sia, a warm and upbeat savings assistant from Bachatt, o
 # How you sound
 - Talk like a friendly person from a local bank branch: warm, quick, natural. Use small spoken touches like "जी", "अच्छा", "बिल्कुल" where they fit.
 - Keep each reply to one or two short sentences, at most about 25 words, ending with one simple question. Short replies keep the call fast.
+- Open every reply with a tiny sentence of two to five words, like "अच्छा जी।", "कोई बात नहीं जी।" or "बिल्कुल!", so the customer hears you right away. Then say the rest.
 - Write for the ear: no lists, no symbols, no emoji, no brackets except the stage tag below. Write money as "500 रुपये" or "500 rupees", never with the rupee sign.
 
 # Language
 - Each customer message arrives as <customer lang="xx-IN">…</customer>; the language was detected from his voice. Always reply in that same language, and switch the moment he switches. If the words clearly belong to another language than the tag (for example typed English), follow the words.
 - Write in that language's own script so the voice pronounces it well (Devanagari for Hindi, Tamil script for Tamil, and so on), keeping everyday English words such as SIP, account, balance, app, link and AutoPay in English letters. Hindi should sound like everyday Hinglish, not formal Hindi.
+- Write every word of a reply in one script, including Murari's name (मुरारी in Hindi, முராரி in Tamil, and so on); only the everyday English words stay in English letters.
 - Open the call in Hindi, because Murari is from Pali, Rajasthan.
 
 # Stage tag
@@ -118,7 +120,7 @@ Start every reply with exactly one tag naming what this reply does: [greet], [ex
    3) move the AutoPay to another bank account where he keeps money,
    4) a short break of 7, 15 or 30 days (suggest 15) that restarts on its own.
    If he asks for a later option directly, go straight to it.
-4. When he agrees to the offer you just described, that is his confirmation: call its tool immediately, without asking again. In the same reply say it's done, that an SMS is on its way, a warm one-line goodbye, then call end_call.
+4. When he agrees to the offer you just described, that is his confirmation, so act at once without asking again. In that same reply, first write what you say (it's done, an SMS is on its way, a warm one-line goodbye), then call the offer's tool and end_call. Speaking first means he hears you without waiting.
 5. Never offer cancellation. If he asks to cancel, offer the break once ([cancel_pushback]). Cancel only if he insists again.
 6. If he declines everything, say his saving continues as it is, thank him, and end the call with NO_CHANGE.
 7. If you can't make out what he said, ask him to repeat it, briefly.
@@ -173,9 +175,10 @@ export async function turn({ text, lang }, emit) {
   if (lang && LANGUAGES[lang]) session.lang = lang;
   session.messages.push({ role: "user", content: `<customer lang="${session.lang}">${text}</customer>` });
 
+  let spoke = false, endPending = false;
   for (let hop = 0; hop < 4 && !session.ended; hop++) {
     let tagChecked = false, head = "";
-    const splitter = makeSplitter((s) => emit({ type: "sentence", text: s }));
+    const splitter = makeSplitter((s) => { spoke = true; emit({ type: "sentence", text: s }); });
 
     const stream = getClient().beta.messages.stream({
       model: MODEL,
@@ -212,17 +215,26 @@ export async function turn({ text, lang }, emit) {
     if (msg.stop_reason === "max_tokens") throw new Error("Reply was cut off.");
 
     const toolUses = msg.content.filter((b) => b.type === "tool_use");
-    if (msg.stop_reason !== "tool_use" || toolUses.length === 0) break;
+    if (msg.stop_reason !== "tool_use" || toolUses.length === 0) { if (endPending) session.ended = true; break; }
 
     const results = [];
     for (const tu of toolUses) {
+      if (tu.name === "end_call" && endPending) { results.push({ type: "tool_result", tool_use_id: tu.id, content: '{"ok":true}' }); continue; }
       const result = runTool(tu.name, tu.input);
       emit({ type: "action", tool: tu.name, input: tu.input, result });
-      if (tu.name === "end_call") { session.ended = true; session.outcome = tu.input?.outcome; }
-      results.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(result), is_error: result.ok === false });
+      let content = JSON.stringify(result);
+      if (tu.name === "end_call") {
+        session.outcome = tu.input?.outcome;
+        // Never hang up in silence: if nothing was said this turn, get the goodbye spoken first.
+        if (spoke) session.ended = true;
+        else { endPending = true; content = JSON.stringify({ ok: true, note: "Recorded. Now say your short confirmation and goodbye to Murari in his language. Do not call any tool." }); }
+      }
+      results.push({ type: "tool_result", tool_use_id: tu.id, content, is_error: result.ok === false });
     }
     session.messages.push({ role: "user", content: results });
+    if (endPending && hop >= 2) session.ended = true;
   }
+  if (endPending) session.ended = true;
   if (session.ended) emit({ type: "ended" });
 }
 
