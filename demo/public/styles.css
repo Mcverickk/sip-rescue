@@ -54,9 +54,8 @@ h1, h2, h3, p { margin: 0; }
 .lang-bar { display: flex; align-items: center; gap: 12px; padding: 0 28px 8px; }
 .lang-q { font-weight: 700; color: var(--night); white-space: nowrap; }
 .langs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px; scrollbar-width: none; }
-.lang { white-space: nowrap; background: var(--paper); border: 2px solid var(--line); border-radius: 99px; padding: 3px 14px; font-size: 16px; font-weight: 600; }
-.lang:hover { border-color: var(--jodhpur); }
-.lang.on { background: var(--night); color: #fff; border-color: var(--night); }
+.lang { white-space: nowrap; background: var(--paper); border: 2px solid var(--line); border-radius: 99px; padding: 3px 14px; font-size: 16px; font-weight: 600; transition: all .3s; }
+.lang.on { background: var(--marigold); color: var(--night); border-color: var(--marigold); transform: translateY(-2px); }
 
 /* ---------------------------------------------------------------- layout */
 .stage { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(360px, 420px) minmax(300px, 1fr); gap: 28px; padding: 10px 28px 32px; align-items: start; }
@@ -230,3 +229,11 @@ h1, h2, h3, p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------------------------------------------------------------- live language + typing */
+.heard-lang { display: flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, .16); border-radius: 99px; padding: 2px 4px 2px 12px; font-size: 13px; animation: pop .4s cubic-bezier(.2, 1.6, .4, 1); }
+.heard-lang b { background: var(--marigold); color: var(--night); border-radius: 99px; padding: 1px 10px; font-size: 15px; }
+.type-row { width: 100%; margin: 8px 0; }
+.type-row input { width: 100%; border: 0; border-radius: 99px; padding: 8px 14px; font: inherit; font-size: 15px; background: rgba(255, 255, 255, .92); color: var(--ink); }
+.type-row input:disabled { opacity: .5; }
+.cap-err { color: #ffd38a; font-size: 15px; }

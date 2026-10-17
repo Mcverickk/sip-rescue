@@ -33,7 +33,7 @@
   </header>
 
   <div class="lang-bar">
-    <span class="lang-q">Sia speaks</span>
+    <span class="lang-q">Murari just talks, Sia follows his language</span>
     <div class="langs" id="langs"></div>
   </div>
 
@@ -131,7 +131,7 @@
         <!-- in call -->
         <div class="screen incall">
           <div class="call-head">
-            <span class="live-dot"></span><span id="callLang">Hinglish</span>
+            <span class="live-dot"></span><span>Live call</span>
             <span class="call-time" id="callTime">0:00</span>
           </div>
           <div class="sia" id="sia">
@@ -139,6 +139,7 @@
             <img class="sia-face" id="siaFace" data-gif="1f60a" data-emoji="😊" alt="Sia" />
           </div>
           <div class="sia-name">Sia</div>
+          <div class="heard-lang" id="heardLang" hidden><span class="hl-label">Murari is speaking</span><b id="heardLangName"></b></div>
           <div class="bars" id="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
 
           <div class="captions" id="captions">
@@ -146,7 +147,9 @@
             <div class="cap-you" id="capYou"></div>
           </div>
 
-          <div class="chips" id="chips"></div>
+          <form class="type-row" id="typeForm" autocomplete="off">
+            <input id="typeIn" placeholder="Or type what Murari says…" aria-label="Type what Murari says" />
+          </form>
 
           <div class="call-controls">
             <button class="mic-btn" id="micBtn" aria-label="Speak">
@@ -156,7 +159,7 @@
               <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" transform="rotate(135 12 12)" d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.6a1 1 0 0 1-.25 1l-2.2 2.2Z"/></svg>
             </button>
           </div>
-          <div class="mic-hint" id="micHint">Tap the mic and speak, or tap a reply</div>
+          <div class="mic-hint" id="micHint">Speak in any Indian language</div>
         </div>
 
         <!-- ended -->
@@ -210,16 +213,6 @@
       </details>
     </section>
   </main>
-
-  <!-- getting a language ready -->
-  <div class="overlay" id="prep" hidden>
-    <div class="prep-card">
-      <img data-gif="1f9e0" data-emoji="🧠" alt="" />
-      <h2 id="prepTitle">Getting Sia ready</h2>
-      <div class="prep-bar"><i id="prepFill"></i></div>
-      <p class="note" id="prepNote">Translating her script and recording her voice</p>
-    </div>
-  </div>
 
   <!-- celebration -->
   <div class="overlay" id="celebrate" hidden>

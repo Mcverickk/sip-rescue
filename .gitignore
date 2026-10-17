@@ -6,3 +6,5 @@ node_modules/
 .env
 !demo/.env
 demo/.cache/
+.env.local
+*.env.local

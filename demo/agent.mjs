@@ -1,56 +1,69 @@
-// SIP Rescue conversation agent.
-// Two engines share the same mocked tools:
-//   - "claude": Claude Opus 5 with tool use (needs ANTHROPIC_API_KEY or another SDK credential)
-//   - "scripted": a deterministic ladder state machine, so the demo always works offline
+// SIP Rescue voice agent, powered by Claude.
+// Sarvam detects the language Murari speaks; Claude understands him, decides what to do (calling the
+// mocked Bachatt APIs as tools) and replies in the same language. Replies are streamed and cut into
+// sentences so each one can be voiced while Claude is still writing the next.
+import "./env.mjs";
 import Anthropic from "@anthropic-ai/sdk";
-import { api, fixture } from "./mockApi.mjs";
-import { LINES, SMS, langById } from "./lines.mjs";
-import { render } from "./sarvam.mjs";
+import { api } from "./mockApi.mjs";
+import { LANGUAGES } from "./sarvam.mjs";
 
 const MODEL = process.env.SIP_RESCUE_MODEL || "claude-opus-5";
-const f = fixture;
+const EFFORT = process.env.SIP_RESCUE_EFFORT || "low"; // voice needs fast turns
 
-// ---------------------------------------------------------------------------- tools
+export const claudeReady = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+export const engineName = () => `Claude (${MODEL})`;
 
+let client = null;
+function getClient() {
+  if (client) return client;
+  const ws = process.env.ANTHROPIC_WORKSPACE_ID;
+  client = new Anthropic(ws ? { defaultHeaders: { "anthropic-workspace-id": ws } } : {});
+  return client;
+}
+
+// ---------------------------------------------------------------------------- tools (mocked APIs)
+// Inputs are tiny, so tool-input streaming stays off and the API validates them for us.
+
+const smsField = { type: "string", description: "Confirmation SMS to Murari, in the language of the call, under 160 characters, signed '- Bachatt'." };
 const TOOLS = [
   {
     name: "send_topup_link",
-    description: "Ladder step 1. Sends the customer an SMS with a link to add money to the Bank of Baroda account the SIP debits. Use only after the customer agrees to add money tonight.",
-    input_schema: { type: "object", properties: { amount_inr: { type: "integer", description: "Rupees the customer agreed to add. Suggest 500." } }, required: ["amount_inr"], additionalProperties: false },
+    description: "Offer 1. Texts Murari a link to add money to his Bank of Baroda account XX9428 tonight. Call it as soon as he agrees to add money.",
+    input_schema: { type: "object", properties: { amount_inr: { type: "integer", description: "Rupees he agreed to add, 500 unless he named another amount." }, sms_text: smsField }, required: ["amount_inr", "sms_text"], additionalProperties: false },
   },
   {
     name: "reduce_sip_amount",
-    description: "Ladder step 2. Lowers the daily SIP amount from tomorrow's debit onward. Minimum is 50 rupees. Use only after the customer clearly agrees to the new amount.",
-    input_schema: { type: "object", properties: { new_amount_inr: { type: "integer", description: "New daily amount in rupees, at least 50 and below the current 100." } }, required: ["new_amount_inr"], additionalProperties: false },
+    description: "Offer 2. Lowers his daily SIP from 100 rupees, starting with tomorrow's debit. Minimum 50. Call it as soon as he agrees to a lower amount.",
+    input_schema: { type: "object", properties: { new_amount_inr: { type: "integer", description: "New daily amount, 50 to 99." }, sms_text: smsField }, required: ["new_amount_inr", "sms_text"], additionalProperties: false },
   },
   {
     name: "change_bank_account",
-    description: "Ladder step 3. Sends a link to move the SIP's UPI AutoPay mandate to another bank account the customer keeps money in. Use only after the customer agrees.",
-    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    description: "Offer 3. Texts him a link to move the UPI AutoPay to another bank account where he keeps money. Call it as soon as he agrees.",
+    input_schema: { type: "object", properties: { sms_text: smsField }, required: ["sms_text"], additionalProperties: false },
   },
   {
     name: "pause_sip",
-    description: "Ladder step 4. Pauses the SIP for 7, 15 or 30 days; it resumes automatically. Use only after the customer agrees to a duration.",
-    input_schema: { type: "object", properties: { days: { type: "integer", enum: [7, 15, 30] } }, required: ["days"], additionalProperties: false },
+    description: "Offer 4. Pauses the SIP for 7, 15 or 30 days; it restarts automatically (15 days restarts on 29 Oct). Call it as soon as he agrees.",
+    input_schema: { type: "object", properties: { days: { type: "integer", enum: [7, 15, 30] }, sms_text: smsField }, required: ["days", "sms_text"], additionalProperties: false },
   },
   {
     name: "cancel_sip",
-    description: "Cancels the SIP. Never offer this. Use only if the customer insists on cancelling a second time after you have offered a pause.",
-    input_schema: { type: "object", properties: { reason: { type: "string" } }, required: ["reason"], additionalProperties: false },
+    description: "Stops the SIP. Never offer it. Only when he insists on cancelling a second time after you offered a pause.",
+    input_schema: { type: "object", properties: { reason: { type: "string" }, sms_text: smsField }, required: ["reason", "sms_text"], additionalProperties: false },
   },
   {
     name: "schedule_callback",
-    description: "Schedules a callback when the customer is busy or asks to talk later.",
-    input_schema: { type: "object", properties: { when: { type: "string", description: "When to call back, e.g. 'tomorrow 19:00'." } }, required: ["when"], additionalProperties: false },
+    description: "Books a callback when he is busy or asks to talk later.",
+    input_schema: { type: "object", properties: { when: { type: "string", description: "e.g. 'tomorrow 7 pm'" } }, required: ["when"], additionalProperties: false },
   },
   {
     name: "end_call",
-    description: "Records the outcome and hangs up. Call it right after your final goodbye sentence.",
+    description: "Hangs up and records the outcome. Call it in the same turn as your goodbye.",
     input_schema: {
       type: "object",
       properties: {
         outcome: { type: "string", enum: ["TOPUP_COMMITTED", "SIP_REDUCED", "BANK_CHANGE_LINK_SENT", "SIP_PAUSED", "SIP_CANCELLED", "CALLBACK_SCHEDULED", "NO_CHANGE", "WRONG_PERSON"] },
-        summary: { type: "string", description: "One English sentence for the ops dashboard." },
+        summary: { type: "string", description: "One English sentence for the ops team." },
       },
       required: ["outcome", "summary"],
       additionalProperties: false,
@@ -58,211 +71,160 @@ const TOOLS = [
   },
 ];
 
+const str = (v) => (typeof v === "string" ? v : "");
 function runTool(name, input) {
+  const i = input && typeof input === "object" ? input : {};
   switch (name) {
-    case "send_topup_link": return api.topupLink(input);
-    case "reduce_sip_amount": return api.reduceSip(input);
-    case "change_bank_account": return api.changeBank(input);
-    case "pause_sip": return api.pauseSip(input);
-    case "cancel_sip": return api.cancelSip(input);
-    case "schedule_callback": return api.scheduleCallback(input);
-    case "end_call": return api.endCall(input);
+    case "send_topup_link": return api.topupLink({ amount_inr: Number(i.amount_inr) || 500, _sms: str(i.sms_text) });
+    case "reduce_sip_amount": return api.reduceSip({ new_amount_inr: Number(i.new_amount_inr), _sms: str(i.sms_text) });
+    case "change_bank_account": return api.changeBank({ _sms: str(i.sms_text) });
+    case "pause_sip": return api.pauseSip({ days: Number(i.days), _sms: str(i.sms_text) });
+    case "cancel_sip": return api.cancelSip({ reason: str(i.reason), _sms: str(i.sms_text) });
+    case "schedule_callback": return api.scheduleCallback({ when: str(i.when) });
+    case "end_call": return api.endCall({ outcome: str(i.outcome) || "NO_CHANGE", summary: str(i.summary) });
     default: return { ok: false, error: "unknown tool " + name };
   }
 }
 
-const SYSTEM = `You are Sia, Bachatt's savings assistant, on a live outbound phone call. Your words are converted to speech, so write exactly what you would say: plain sentences, no lists, no markdown, no emoji.
+// ---------------------------------------------------------------------------- prompt
 
-Language: speak LANGUAGE_PLACEHOLDER, the way people talk every day, mixing in common English words like SIP, account and balance. For Hinglish use Devanagari script for Hindi words so the voice engine pronounces them well. If the customer switches language, follow them. Say amounts as "500 rupaye", never with the rupee symbol. Keep every turn to one to three short sentences and end with one clear question, except the goodbye.
+const SYSTEM = `You are Sia, a warm and upbeat savings assistant from Bachatt, on a live phone call. Everything you write is spoken aloud by a text-to-speech voice.
 
-Why you are calling. It is Monday 13 October 2026, 7 pm.
-- Customer: ${f.user.first_name} from ${f.user.city}. Address him as "${f.user.display_name}".
-- SIP: ${f.sip.product_label}, ${f.sip.amount_inr} rupaye every day, into two liquid funds. He has about 140 rupaye invested so far.
-- Tomorrow morning, 14 October, 100 rupaye will be debited from his ${f.bank.name} account ending ${f.bank.acct_last4}.
-- The last two debits, on 12 and 13 October, failed because of low balance, even though the balance then was 270 and 212 rupaye. The bank keeps a minimum balance aside.
-- His latest balance from bank SMS is 149 rupaye. So tomorrow's debit will most likely fail again.
-- There is no penalty or charge for a failed debit. Say this early so he is not worried. He only misses that day's savings.
+# How you sound
+- Talk like a friendly person from a local bank branch: warm, quick, natural. Use small spoken touches like "जी", "अच्छा", "बिल्कुल" where they fit.
+- Keep each reply to one or two short sentences, at most about 25 words, ending with one simple question. Short replies keep the call fast.
+- Write for the ear: no lists, no symbols, no emoji, no brackets except the stage tag below. Write money as "500 रुपये" or "500 rupees", never with the rupee sign.
 
-How the call goes:
-1. Greet, say who you are and that this is about his Smart Deposit savings, and check it is a good time. If it is a wrong person, apologise and end the call. If he is busy, offer a callback and schedule it.
-2. Explain the situation in one or two sentences: two debits bounced, balance is low, no penalty.
-3. Walk this ladder strictly in order, one offer per turn, moving down only when he declines:
-   a. Add money tonight: ask him to keep at least 500 rupaye in the account ending ${f.bank.acct_last4}. If yes, send the top-up link.
-   b. Lower the daily amount: offer 50 rupaye a day instead of 100. If yes, reduce it.
-   c. Change the bank: ask if he keeps money in another account and offer a link to move the AutoPay there. If yes, send it.
-   d. Pause: offer a pause of 7, 15 or 30 days, 15 suggested; it restarts on its own.
+# Language
+- Each customer message arrives as <customer lang="xx-IN">…</customer>; the language was detected from his voice. Always reply in that same language, and switch the moment he switches. If the words clearly belong to another language than the tag (for example typed English), follow the words.
+- Write in that language's own script so the voice pronounces it well (Devanagari for Hindi, Tamil script for Tamil, and so on), keeping everyday English words such as SIP, account, balance, app, link and AutoPay in English letters. Hindi should sound like everyday Hinglish, not formal Hindi.
+- Open the call in Hindi, because Murari is from Pali, Rajasthan.
+
+# Stage tag
+Start every reply with exactly one tag naming what this reply does: [greet], [explain], [topup], [reduce], [bank], [pause], [cancel_pushback] or [close]. It is removed before speaking.
+
+# The situation (it is Monday 13 October 2026, 7 pm)
+- Murari saves 100 rupees every day in Bachatt's Smart Deposit (two liquid funds). He has about 140 rupees saved so far.
+- Tomorrow morning 100 rupees will be debited from his Bank of Baroda account ending 9428.
+- The last two debits, on 12 and 13 October, bounced for low balance. His balance is now 149 rupees and the bank keeps a minimum balance aside, so tomorrow's debit will likely bounce too.
+- A bounced debit has no penalty or charge. He only misses that day's saving. Say this early so he isn't worried.
+
+# The call
+1. Greet him by name, say you're Sia from Bachatt calling about his savings, and ask if it's a good time. Wrong person: apologise and end. Busy: book a callback and end.
+2. In one or two sentences: praise his daily saving habit, say two debits bounced for low balance, say there's no penalty, then make offer 1.
+3. Offers, strictly one per reply and in this order, moving on only when he declines:
+   1) add at least 500 rupees to the account tonight so his saving streak doesn't break,
+   2) save 50 rupees a day instead of 100,
+   3) move the AutoPay to another bank account where he keeps money,
+   4) a short break of 7, 15 or 30 days (suggest 15) that restarts on its own.
    If he asks for a later option directly, go straight to it.
-4. Before any tool call that changes his SIP, repeat the change in one sentence and get a clear yes. Accepting the top-up link counts as a yes.
-5. Never offer cancellation. If he asks to cancel, first offer a pause once. Cancel only if he insists again.
-6. After a change succeeds, tell him he will get an SMS confirmation, say a warm goodbye, and call end_call in the same turn.
-7. If he declines everything, say the SIP will continue as is, thank him, and call end_call with NO_CHANGE.
+4. When he agrees to the offer you just described, that is his confirmation: call its tool immediately, without asking again. In the same reply say it's done, that an SMS is on its way, a warm one-line goodbye, then call end_call.
+5. Never offer cancellation. If he asks to cancel, offer the break once ([cancel_pushback]). Cancel only if he insists again.
+6. If he declines everything, say his saving continues as it is, thank him, and end the call with NO_CHANGE.
+7. If you can't make out what he said, ask him to repeat it, briefly.
 
-Safety: never ask for OTP, PIN, card or full account numbers. Never threaten or invent penalties, charges or credit-score effects. Never promise returns.`;
+# Rules
+Never ask for OTP, PIN, card or account numbers. Never invent penalties, charges, credit-score effects or returns. Never pressure him.`;
 
-// ---------------------------------------------------------------------------- Claude engine
+// ---------------------------------------------------------------------------- streaming turn
 
-let client = null;
-export function claudeAvailable() {
-  if (process.env.SIP_RESCUE_ENGINE === "scripted") return false;
-  return Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
-}
+const STAGE_TAG = /^\s*\[(greet|explain|topup|reduce|bank|pause|cancel_pushback|close)\]\s*/i;
+const SENTENCE_END = /([.!?।॥]+["'”’)]?)(\s+|$)/;
 
-async function claudeTurn(session, userText) {
-  client ??= new Anthropic();
-  const system = SYSTEM.replace("LANGUAGE_PLACEHOLDER", langById(session.lang).english);
-  session.messages.push({ role: "user", content: userText });
-  const spoken = [];
-  const actions = [];
-  for (let hop = 0; hop < 6; hop++) {
-    const response = await client.beta.messages.create({
-      model: MODEL,
-      max_tokens: 4000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: { effort: "low" },
-      system,
-      tools: TOOLS,
-      messages: session.messages,
-    });
-    if (response.stop_reason === "refusal") {
-      session.messages.pop();
-      throw new Error("Claude declined this turn (refusal).");
-    }
-    session.messages.push({ role: "assistant", content: response.content });
-    for (const block of response.content) if (block.type === "text" && block.text.trim()) spoken.push(block.text.trim());
-
-    const toolUses = response.content.filter((b) => b.type === "tool_use");
-    if (response.stop_reason !== "tool_use" || toolUses.length === 0) break;
-
-    const results = [];
-    for (const tu of toolUses) {
-      const input = typeof tu.input === "object" && tu.input ? tu.input : {};
-      const result = runTool(tu.name, input);
-      actions.push({ tool: tu.name, input, result });
-      if (tu.name === "end_call") session.ended = true;
-      results.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(result), is_error: result.ok === false });
-    }
-    session.messages.push({ role: "user", content: results });
-    if (session.ended) break;
-  }
-  return { say: spoken.join(" "), actions, ended: session.ended };
-}
-
-// ---------------------------------------------------------------------------- scripted engine
-// Deterministic ladder. Intent is read from the English translation of what the customer said
-// (Sarvam STT translate mode), plus the raw text for typed Hinglish.
-
-const RX = {
-  yes: /\b(haan|haa|han|hanji|haanji|ji haan|yes|yeah|yep|yup|ok|okay|theek|thik|sure|kar do|kardo|karo|chalega|bilkul|zaroor|jaroor|done|agree|sahi|accha|achha|go ahead|tell me|speak|please do|alright|of course|fine|will add|i will|i'll|हाँ|हां|ठीक)\b/i,
-  no: /\b(nahi|nahin|nhi|no|nope|mat|not|mushkil|don'?t|do not|can'?t|cannot|won'?t|unable|नहीं)\b/i,
-  busy: /\b(busy|baad mein|baad me|later|call back|callback|call me tomorrow|kal baat|not a good time)\b/i,
-  wrong: /\b(wrong number|galat number|not murari|murari nahi)\b/i,
-  cancel: /\b(cancel|band kar|bandh|close the sip|stop the sip|stop my sip|stop sip|stop it|khatam|बंद)/i,
-  pause: /\b(pause|rok|ruk|break|hold|रोक)/i,
-  reduce: /\b(kam kar|kam karo|kam kardo|amount kam|ghata|reduce|lower|decrease|50|pachas|fifty|chhota)\b/i,
-  bank: /\b(bank|account|khata|dusra|doosra|another|other|sbi|hdfc|icici|axis|kotak|अकाउंट)\b/i,
-  topup: /\b(daal|dal|add|jama|top ?up|transfer|deposit|put money)\b/i,
-};
-const pauseDays = (t) => (/\b(30|thirty|tees|month|mahina)\b/i.test(t) ? 30 : /\b(7|seven|saat|week|hafta)\b/i.test(t) ? 7 : 15);
-
-function decide(session, raw, english) {
-  const t = `${english || ""} | ${raw || ""}`.toLowerCase();
-  const s = session.stage;
-  const act = [];
-  const end = (line, outcome, summary, extra = []) => ({ line, act: [...extra, ["end_call", { outcome, summary }]], ended: true });
-
-  if (s === "start") { session.stage = "consent"; return { line: "hello", act }; }
-  if (RX.wrong.test(t)) return end("wrong_person", "WRONG_PERSON", "Wrong person picked up.");
-  if (RX.busy.test(t) && s === "consent") return end("busy", "CALLBACK_SCHEDULED", "Customer was busy; callback scheduled for tomorrow 19:00.", [["schedule_callback", { when: "tomorrow 19:00" }]]);
-
-  if (RX.cancel.test(t)) {
-    if (session.cancelAsked) return end("cancel_yes", "SIP_CANCELLED", "Customer insisted on cancelling after being offered a pause.", [["cancel_sip", { reason: "Customer insisted after a pause was offered" }, "cancel"]]);
-    session.cancelAsked = true; session.stage = "pause"; return { line: "cancel_pushback", act };
-  }
-  const no = RX.no.test(t);
-  const yes = RX.yes.test(t) && !no;
-  if (s !== "consent" && RX.pause.test(t) && !no) session.stage = "pause";
-  else if (s !== "consent" && s !== "pause" && RX.reduce.test(t) && !no && !/\b500\b/.test(t)) session.stage = "reduce";
-
-  switch (session.stage) {
-    case "consent":
-      if (no && !yes && !/\bbaat\b|talk/.test(t)) return end("busy", "CALLBACK_SCHEDULED", "Customer could not talk; callback scheduled.", [["schedule_callback", { when: "tomorrow 19:00" }]]);
-      session.stage = "topup"; session.unclearCount = 0; return { line: "explain", act };
-    case "topup":
-      if (yes || (RX.topup.test(t) && !no)) return end("topup_yes", "TOPUP_COMMITTED", "Customer agreed to add 500 rupees tonight; top-up link sent.", [["send_topup_link", { amount_inr: 500 }, "topup"]]);
-      if (!no && session.unclearCount < 1) { session.unclearCount++; return { line: "unclear", act }; }
-      session.stage = "reduce"; session.unclearCount = 0; return { line: "offer_reduce", act };
-    case "reduce":
-      if (yes || (RX.reduce.test(t) && !no)) return end("reduce_yes", "SIP_REDUCED", "Customer agreed to lower the daily SIP from 100 to 50 rupees.", [["reduce_sip_amount", { new_amount_inr: 50 }, "reduce"]]);
-      if (!no && session.unclearCount < 1) { session.unclearCount++; return { line: "unclear", act }; }
-      session.stage = "bank"; session.unclearCount = 0; return { line: "offer_bank", act };
-    case "bank":
-      if (yes) return end("bank_yes", "BANK_CHANGE_LINK_SENT", "Customer will move AutoPay to another bank; link sent.", [["change_bank_account", {}, "bank"]]);
-      if (!no && session.unclearCount < 1) { session.unclearCount++; return { line: "unclear", act }; }
-      session.stage = "pause"; session.unclearCount = 0; return { line: "offer_pause", act };
-    case "pause": {
-      if (yes || (RX.pause.test(t) && !no) || /\b(7|15|30)\b/.test(t) && !no) {
-        const d = pauseDays(t);
-        return end(`pause_${d}`, "SIP_PAUSED", `Customer chose to pause the SIP for ${d} days.`, [["pause_sip", { days: d }, `pause_${d}`]]);
+// Cuts streamed text into speakable chunks: full sentences, or long clauses at a comma.
+function makeSplitter(onChunk) {
+  let buf = "";
+  const flush = (force = false) => {
+    for (;;) {
+      const m = SENTENCE_END.exec(buf);
+      if (m && m.index + m[1].length >= 2 && (m[2] || force)) {
+        const end = m.index + m[1].length;
+        const chunk = buf.slice(0, end).trim();
+        buf = buf.slice(end + m[2].length);
+        if (chunk) onChunk(chunk);
+        continue;
       }
-      if (!no && session.unclearCount < 1) { session.unclearCount++; return { line: "unclear", act }; }
-      return end("no_change", "NO_CHANGE", "Customer declined every option; SIP continues unchanged.");
+      if (buf.length > 140) {
+        const cut = buf.lastIndexOf(",", 120);
+        if (cut > 30) { onChunk(buf.slice(0, cut + 1).trim()); buf = buf.slice(cut + 1); continue; }
+      }
+      break;
     }
-  }
-  return { line: "unclear", act };
+    if (force && buf.trim()) { onChunk(buf.trim()); buf = ""; }
+  };
+  return { push: (t) => { buf += t; flush(); }, end: () => flush(true) };
 }
-
-const STAGE_OF_LINE = { hello: "start", explain: "topup", offer_reduce: "reduce", offer_bank: "bank", offer_pause: "pause", cancel_pushback: "pause" };
-
-async function scriptedTurn(session, raw, english) {
-  const prevStage = session.stage;
-  const d = decide(session, raw, english);
-  const actions = [];
-  for (const [tool, input, smsKey] of d.act) {
-    const args = { ...input };
-    if (smsKey && SMS[smsKey]) args._sms = (await render(SMS[smsKey], session.lang)).text;
-    const result = runTool(tool, args);
-    actions.push({ tool, input, result });
-  }
-  if (d.ended) session.ended = true;
-  const r = await render(LINES[d.line], session.lang);
-  const offer = d.line === "unclear" ? session.lastOffer : STAGE_OF_LINE[d.line] ?? null;
-  if (offer) session.lastOffer = offer;
-  return { say: r.text, speak: r.speak, actions, ended: session.ended, offer: session.ended ? null : offer, lineId: d.line, prevStage };
-}
-
-// ---------------------------------------------------------------------------- sessions
 
 let session = null;
 
-export function engineName() {
-  return claudeAvailable() ? `Claude (${MODEL})` : "Scripted";
+export function startSession() {
+  session = { messages: [], lang: "hi-IN", ended: false, outcome: null };
+  return session;
 }
+export const currentLang = () => session?.lang ?? "hi-IN";
 
-export async function startCall(lang = "hinglish") {
-  session = { messages: [], stage: "start", ended: false, lang, unclearCount: 0, engine: claudeAvailable() ? "claude" : "scripted" };
-  return turn("Hello?", "Hello?");
-}
+/**
+ * Runs one customer turn and streams what happens through emit(event):
+ *   {type:"stage", stage}  {type:"sentence", text}  {type:"action", tool, input, result}  {type:"ended"}
+ */
+export async function turn({ text, lang }, emit) {
+  if (!session) startSession();
+  if (session.ended) return;
+  if (lang && LANGUAGES[lang]) session.lang = lang;
+  session.messages.push({ role: "user", content: `<customer lang="${session.lang}">${text}</customer>` });
 
-export async function turn(text, english) {
-  if (!session) throw new Error("No active call. Start a call first.");
-  if (session.ended) return { say: "", actions: [], ended: true, engine: session.engine };
-  if (session.engine === "claude") {
-    try {
-      const r = await claudeTurn(session, text);
-      return { ...r, speak: r.say, engine: session.engine };
-    } catch (err) {
-      console.error("[agent] Claude error, switching this call to the scripted engine:", err.message);
-      session.engine = "scripted";
-      session.stage = session.messages.length > 2 ? "topup" : "start";
-      session.fallbackReason = err.message;
+  for (let hop = 0; hop < 4 && !session.ended; hop++) {
+    let tagChecked = false, head = "";
+    const splitter = makeSplitter((s) => emit({ type: "sentence", text: s }));
+
+    const stream = getClient().beta.messages.stream({
+      model: MODEL,
+      max_tokens: 2000,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: { effort: EFFORT },
+      system: SYSTEM,
+      tools: TOOLS,
+      messages: session.messages,
+    });
+
+    for await (const ev of stream) {
+      if (ev.type !== "content_block_delta" || ev.delta.type !== "text_delta") continue;
+      let t = ev.delta.text;
+      if (!tagChecked) {
+        // Hold back the first characters until we know whether they are a stage tag.
+        head += t;
+        if (head.length < 24 && !head.includes("]") && head.trimStart().startsWith("[")) continue;
+        if (!head.trim()) continue;
+        const m = STAGE_TAG.exec(head);
+        if (m) emit({ type: "stage", stage: m[1].toLowerCase() });
+        t = m ? head.slice(m[0].length) : head;
+        tagChecked = true;
+      }
+      splitter.push(t);
     }
-  }
-  const r = await scriptedTurn(session, text, english);
-  return { ...r, engine: session.engine, fallbackReason: session.fallbackReason };
-}
+    if (!tagChecked && head.trim()) splitter.push(head.replace(STAGE_TAG, ""));
+    splitter.end();
 
-export function currentLang() { return session?.lang ?? "hinglish"; }
+    const msg = await stream.finalMessage();
+    if (msg.stop_reason === "refusal") throw new Error("Claude declined this turn.");
+    session.messages.push({ role: "assistant", content: msg.content });
+    if (msg.stop_reason === "max_tokens") throw new Error("Reply was cut off.");
+
+    const toolUses = msg.content.filter((b) => b.type === "tool_use");
+    if (msg.stop_reason !== "tool_use" || toolUses.length === 0) break;
+
+    const results = [];
+    for (const tu of toolUses) {
+      const result = runTool(tu.name, tu.input);
+      emit({ type: "action", tool: tu.name, input: tu.input, result });
+      if (tu.name === "end_call") { session.ended = true; session.outcome = tu.input?.outcome; }
+      results.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(result), is_error: result.ok === false });
+    }
+    session.messages.push({ role: "user", content: results });
+  }
+  if (session.ended) emit({ type: "ended" });
+}
 
 export function endCallManually() {
   if (session && !session.ended) {

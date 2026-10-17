@@ -1,34 +1,42 @@
-// Sarvam AI client: text-to-speech (bulbul:v3), speech-to-text (saaras:v3) and translation
-// (mayura:v1). Results are cached on disk so the stage demo replays instantly.
+// Sarvam AI: speech-to-text with automatic language detection (saaras:v4) and fast text-to-speech
+// (bulbul:v4-flash) with a warm, conversational female voice per language. Audio is cached on disk.
+import "./env.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { LANGS, LINES, CHIPS, SMS, langById } from "./lines.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-
-// Minimal .env loader (no dependency): demo/.env holds SARVAM_API_KEY.
-const envFile = path.join(here, ".env");
-if (fs.existsSync(envFile)) {
-  for (const line of fs.readFileSync(envFile, "utf8").split("\n")) {
-    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
-  }
-}
-
 const KEY = () => process.env.SARVAM_API_KEY;
 export const sarvamEnabled = () => Boolean(KEY());
-export const SPEAKER = process.env.SARVAM_SPEAKER || "priya";
 const BASE = "https://api.sarvam.ai";
+const PACE = Number(process.env.SARVAM_PACE || 1.12);
 
-const cacheDir = path.join(here, ".cache");
-const ttsDir = path.join(cacheDir, "tts");
+const ttsDir = path.join(here, ".cache", "tts");
 fs.mkdirSync(ttsDir, { recursive: true });
-const trFile = path.join(cacheDir, "translations.json");
-const trCache = fs.existsSync(trFile) ? JSON.parse(fs.readFileSync(trFile, "utf8")) : {};
-const saveTr = () => fs.writeFileSync(trFile, JSON.stringify(trCache, null, 1));
 const hash = (s) => crypto.createHash("sha1").update(s).digest("hex").slice(0, 16);
+
+export const LANGUAGES = {
+  "hi-IN": "Hindi", "en-IN": "English", "bn-IN": "Bengali", "mr-IN": "Marathi", "ta-IN": "Tamil", "te-IN": "Telugu",
+  "gu-IN": "Gujarati", "kn-IN": "Kannada", "ml-IN": "Malayalam", "pa-IN": "Punjabi", "od-IN": "Odia",
+};
+export const NATIVE = {
+  "hi-IN": "हिन्दी", "en-IN": "English", "bn-IN": "বাংলা", "mr-IN": "मराठी", "ta-IN": "தமிழ்", "te-IN": "తెలుగు",
+  "gu-IN": "ગુજરાતી", "kn-IN": "ಕನ್ನಡ", "ml-IN": "മലയാളം", "pa-IN": "ਪੰਜਾਬੀ", "od-IN": "ଓଡ଼ିଆ",
+};
+
+// Female customer-care / conversational personas (bulbul:v4-flash). Languages without one use bulbul:v3.
+const VOICES = {
+  "hi-IN": ["bulbul:v4-flash", "ishita_enhi_customer"], // Hindi + English code-mixed: ideal for Hinglish
+  "en-IN": ["bulbul:v4-flash", "simran_en_conversation"],
+  "bn-IN": ["bulbul:v4-flash", "roopa_bn_conversational"],
+  "gu-IN": ["bulbul:v4-flash", "pooja_gu_customer"],
+  "kn-IN": ["bulbul:v4-flash", "chaitra_kn_conversation"],
+  "te-IN": ["bulbul:v4-flash", "kavitha_te_conversation"],
+  "pa-IN": ["bulbul:v4-flash", "anand_pa_customer"],
+  default: ["bulbul:v3", "priya"],
+};
+export const voiceFor = (code) => VOICES[code] || VOICES.default;
 
 async function call(pathname, init) {
   const res = await fetch(BASE + pathname, { ...init, headers: { "api-subscription-key": KEY(), ...(init.headers || {}) } });
@@ -36,113 +44,48 @@ async function call(pathname, init) {
   return res.json();
 }
 
-// ------------------------------------------------------------------ translate
-
-export async function translate(text, langId) {
-  const lang = langById(langId);
-  const k = `${lang.code}|${text}`;
-  if (trCache[k]) return trCache[k];
-  const d = await call("/translate", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ input: text, source_language_code: "en-IN", target_language_code: lang.code, model: "mayura:v1", mode: "modern-colloquial", speaker_gender: "Female", numerals_format: "international" }),
-  });
-  trCache[k] = d.translated_text;
-  saveTr();
-  return d.translated_text;
-}
-
-// Text for display (caption) and for speech, for any entry of LINES / CHIPS / SMS.
-export async function render(entry, langId) {
-  if (langId === "hinglish") return { text: entry.hinglish, speak: entry.hi };
-  if (langId === "hi") return { text: entry.hi, speak: entry.hi };
-  if (langId === "en") return { text: entry.en, speak: entry.en };
-  const t = await translate(entry.en, langId);
-  return { text: t, speak: t };
+// Which language is a piece of text written in? Used to pick the voice for each sentence Claude says.
+const SCRIPTS = [
+  [/[ঀ-৿]/, "bn-IN"], [/[਀-੿]/, "pa-IN"], [/[઀-૿]/, "gu-IN"], [/[଀-୿]/, "od-IN"],
+  [/[஀-௿]/, "ta-IN"], [/[ఀ-౿]/, "te-IN"], [/[ಀ-೿]/, "kn-IN"], [/[ഀ-ൿ]/, "ml-IN"],
+];
+export function languageOfText(text, hint = "hi-IN") {
+  for (const [rx, code] of SCRIPTS) if (rx.test(text)) return code;
+  if (/[ऀ-ॿ]/.test(text)) return hint === "mr-IN" ? "mr-IN" : "hi-IN";
+  return "en-IN";
 }
 
 // ------------------------------------------------------------------ text to speech
 
 const inflight = new Map();
-export function ttsId(text, langId) {
-  return hash(`${SPEAKER}|${langById(langId).code}|${text}`);
-}
-export function ttsPath(id) {
-  return path.join(ttsDir, `${id}.wav`);
-}
-export async function tts(text, langId) {
-  const id = ttsId(text, langId);
-  const file = ttsPath(id);
-  if (fs.existsSync(file)) return id;
+export const ttsPath = (id) => path.join(ttsDir, `${id}.wav`);
+export async function tts(text, code) {
+  const [model, speaker] = voiceFor(code);
+  const id = hash(`${model}|${speaker}|${PACE}|${code}|${text}`);
+  if (fs.existsSync(ttsPath(id))) return id;
   if (inflight.has(id)) return inflight.get(id);
   const p = (async () => {
     const d = await call("/text-to-speech", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, language_code: langById(langId).code, model: "bulbul:v3", speaker: SPEAKER, pace: 1.05, speech_sample_rate: 22050 }),
+      body: JSON.stringify({ text, language_code: code, model, speaker, pace: PACE, speech_sample_rate: 24000 }),
     });
-    fs.writeFileSync(file, Buffer.from(d.audios.join(""), "base64"));
+    fs.writeFileSync(ttsPath(id), Buffer.from(d.audios.join(""), "base64"));
     return id;
   })().finally(() => inflight.delete(id));
   inflight.set(id, p);
   return p;
 }
 
-// ------------------------------------------------------------------ speech to text
+// ------------------------------------------------------------------ speech to text (auto language)
 
-async function sttOnce(buf, mime, code, mode) {
-  const form = new FormData();
+export async function stt(buf, mime) {
   mime = (mime || "audio/webm").split(";")[0];
+  const form = new FormData();
   form.append("file", new Blob([buf], { type: mime }), mime.includes("wav") ? "speech.wav" : "speech.webm");
-  form.append("model", "saaras:v3");
-  form.append("language_code", code);
-  form.append("mode", mode);
+  form.append("model", "saaras:v4");
+  form.append("language_code", "unknown");
   const d = await call("/speech-to-text", { method: "POST", body: form });
-  return d.transcript || "";
+  const code = LANGUAGES[d.language_code] ? d.language_code : "hi-IN";
+  return { transcript: (d.transcript || "").trim(), language_code: code, language: LANGUAGES[code], native: NATIVE[code], confidence: d.language_probability ?? null };
 }
-
-// Returns the caption in the user's language plus an English version for intent matching.
-export async function stt(buf, mime, langId) {
-  const lang = langById(langId);
-  if (lang.id === "en") {
-    const t = await sttOnce(buf, mime, "en-IN", "transcribe");
-    return { transcript: t, english: t };
-  }
-  const [transcript, english] = await Promise.all([
-    sttOnce(buf, mime, lang.code, lang.sttMode),
-    sttOnce(buf, mime, lang.code, "translate"),
-  ]);
-  return { transcript, english };
-}
-
-// ------------------------------------------------------------------ warm-up per language
-
-const prepared = new Map();
-export function prepareLanguage(langId, onProgress = () => {}) {
-  if (!sarvamEnabled()) return Promise.resolve({ ok: false, reason: "no key" });
-  if (prepared.has(langId)) return prepared.get(langId);
-  const p = (async () => {
-    const lineEntries = Object.values(LINES);
-    const chipEntries = Object.values(CHIPS).flat();
-    const smsEntries = Object.values(SMS);
-    const total = lineEntries.length * 2 + chipEntries.length + smsEntries.length;
-    let done = 0;
-    const tick = () => onProgress(++done, total);
-    const pool = async (items, fn, n = 4) => {
-      const q = [...items];
-      await Promise.all(Array.from({ length: n }, async () => { while (q.length) await fn(q.shift()); }));
-    };
-    const rendered = [];
-    await pool([...lineEntries, ...chipEntries, ...smsEntries], async (e) => {
-      const r = await render(e, langId);
-      if (lineEntries.includes(e)) rendered.push(r);
-      tick();
-    });
-    await pool(rendered, async (r) => { await tts(r.speak, langId); tick(); }, 3);
-    return { ok: true };
-  })().catch((err) => { prepared.delete(langId); throw err; });
-  prepared.set(langId, p);
-  return p;
-}
-
-export { LANGS };
