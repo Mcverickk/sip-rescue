@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sip-rescue-demo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["demo/server.mjs"],
+      "port": 5173
+    }
+  ]
+}

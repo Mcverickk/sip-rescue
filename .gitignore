@@ -1,0 +1,6 @@
+buildathon-data/
+pipeline/out/
+__pycache__/
+.DS_Store
+node_modules/
+.env

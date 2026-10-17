@@ -1,0 +1,63 @@
+{
+  "_source": "Taken from buildathon-data (investment/orders.csv, sip_plans.csv, holdings.csv, sms/sms.csv, loan/customers.csv) for user 1752215809777244. Demo night = 2026-10-13 19:00 IST.",
+  "demo_now": "2026-10-13T19:00:00+05:30",
+  "user": {
+    "user_id": "1752215809777244",
+    "first_name": "Murari",
+    "display_name": "Murari ji",
+    "mobile": "9405108927",
+    "mobile_masked": "94XXXXX927",
+    "city": "Pali, Rajasthan",
+    "language": "Hinglish"
+  },
+  "bank": {
+    "name": "Bank of Baroda",
+    "short": "BOB",
+    "acct_last4": "9428",
+    "min_balance_floor_inr": 500
+  },
+  "sip": {
+    "sip_plan_id": "896084020824906105",
+    "product": "SMART_DEPOSIT",
+    "product_label": "Smart Deposit",
+    "basket_id": "SD_B03",
+    "basket_name": "Smart Deposit - Arunodaya + Pravah",
+    "funds": ["Arunodaya Liquid Fund 50%", "Pravah Liquid Fund 50%"],
+    "frequency": "DAILY",
+    "amount_inr": 100,
+    "min_sip_amount_inr": 50,
+    "plan_type": "NEW",
+    "status": "ACTIVE",
+    "created_at": "2026-10-08 17:17:59",
+    "activated_at": "2026-10-08 17:23:59",
+    "first_debit_date": "2026-10-10"
+  },
+  "holdings": { "invested_inr": 140.59, "current_value_inr": 140.65 },
+  "upcoming_debit": {
+    "order_group_id": "897775134835867593",
+    "amount_inr": 100,
+    "notice_sent_at": "2026-10-13 09:17:52",
+    "debit_date": "2026-10-14",
+    "debit_window": "tomorrow morning, 08:00 to 12:00"
+  },
+  "debit_history": [
+    { "debit_date": "2026-10-10", "amount_inr": 100, "status": "SUCCESS" },
+    { "debit_date": "2026-10-11", "amount_inr": 100, "status": "SUCCESS" },
+    { "debit_date": "2026-10-12", "amount_inr": 100, "status": "FAILED", "failure_reason": "insufficient_funds", "balance_that_morning_inr": 270.74 },
+    { "debit_date": "2026-10-13", "amount_inr": 100, "status": "FAILED", "failure_reason": "insufficient_funds", "balance_that_morning_inr": 212.54 },
+    { "debit_date": "2026-10-14", "amount_inr": 100, "status": "SCHEDULED" }
+  ],
+  "balance_sms": [
+    { "sender": "JK-BOBSMS-S", "received_at": "2026-10-11 18:23", "balance_inr": 270.74, "body": "Rs.10.00 Dr. from A/C XXXXXX9428 and Cr. to paytmqr629f9i@ptys. Ref:665094674342. AvlBal:Rs270.74 - BOB" },
+    { "sender": "JK-BOBSMS-S", "received_at": "2026-10-12 13:23", "balance_inr": 212.54, "body": "Rs.58.20 Dr. from A/C XXXXXX9428 and Cr. to bdpg2.iruts@sbi. Ref:628562024019. AvlBal:Rs212.54 - BOB" },
+    { "sender": "JK-BOBSMS-S", "received_at": "2026-10-12 14:13", "balance_inr": 149.54, "body": "Rs.63.00 Dr. from A/C XXXXXX9428 and Cr. to 9919722738@ybl. Ref:628543639387. AvlBal:Rs149.54(2026:10:12 02:13:30). Not you? Call 18005700/5000-BOB" }
+  ],
+  "latest_balance": { "balance_inr": 149.54, "as_of": "2026-10-12 14:13", "age_hours": 28.8, "confidence": "linked_account" },
+  "decision": {
+    "call_type": "CONVERSATION_CALL",
+    "reason": "Balance Rs 149.54 sits inside the Rs 500 minimum-balance floor, and the last two debits bounced for insufficient funds even at Rs 270 and Rs 212.",
+    "streak": 2,
+    "fails_14d": 2,
+    "suggested_topup_inr": 500
+  }
+}

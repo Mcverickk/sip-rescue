@@ -1,0 +1,15 @@
+{
+  "name": "sip-rescue-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SIP Rescue hackathon demo: browser voice agent with mocked Bachatt APIs",
+  "scripts": {
+    "start": "node server.mjs",
+    "scripted": "SIP_RESCUE_ENGINE=scripted node server.mjs"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest"
+  }
+}
