@@ -19,8 +19,9 @@ A browser demo for one investor, with a voice agent and every Bachatt API mocked
 cd demo && npm install && npm start
 ```
 
-Open http://localhost:5173 in Chrome. Set `ANTHROPIC_API_KEY` to drive the agent with Claude;
-without it a scripted agent runs the same ladder. See `CLAUDE.md` for details.
+Open http://localhost:5173 in Chrome and allow the microphone. Sia speaks and listens through
+Sarvam AI in 12 Indian languages. Set `ANTHROPIC_API_KEY` to drive the conversation with Claude;
+without it a guided script runs the same ladder. See `CLAUDE.md` for details.
 
 ## Layout
 

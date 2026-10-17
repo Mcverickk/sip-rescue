@@ -15,8 +15,13 @@ The goal is a working demo, not production. Decisions already made:
 - **One user, mocked everything.** The demo follows a single investor, Murari
   (user_id 1752215809777244), on the night of Mon 13 Oct 2026, 19:00 IST. His data is a fixed
   fixture in `demo/data/murari.json`, taken from the organisers' CSVs.
-- **No phone calls.** The "call" is a browser voice agent: Web Speech API for speech in and out,
-  plus typed input and quick-reply chips as a fallback.
+- **No phone calls.** The "call" is a browser voice agent. Murari's phone is drawn on screen and the
+  presenter answers it. Speech in and out uses **Sarvam AI** (key in `demo/.env`, committed on purpose:
+  it is a free demo key). Browser speech is the fallback if Sarvam is unreachable.
+- **Languages:** Hinglish (default), Hindi, English, Bengali, Marathi, Tamil, Telugu, Gujarati,
+  Kannada, Malayalam, Punjabi, Odia. Optimise for natural conversation and conversion in these.
+- **Audience is non-technical.** The UI tells a story in three acts (tonight's check, the call,
+  what changed) with animated Noto emoji GIFs. Technical JSON stays behind a "system calls" toggle.
 - **All Bachatt internal APIs are mocked** in `demo/mockApi.mjs` (top-up link, modify/reduce SIP,
   change bank, pause, cancel, SMS, callbacks, call outcome). Every call is logged with request and
   response and shown on screen. They mutate an in-memory `sip_plans` list shaped like the real table.
@@ -26,7 +31,9 @@ The goal is a working demo, not production. Decisions already made:
 ```
 demo/                 the demo app (Node 20+, ESM, no build step)
   server.mjs          static site + /api/* for the UI + /internal/v1/* mocked Bachatt APIs
-  agent.mjs           conversation agent: Claude engine + scripted fallback engine
+  agent.mjs           conversation agent: Claude engine + scripted ladder engine
+  lines.mjs           everything Sia says (en / Hinglish / Devanagari), reply chips, SMS templates
+  sarvam.mjs          Sarvam TTS (bulbul:v3), STT (saaras:v3), translation (mayura:v1), disk cache
   mockApi.mjs         in-memory mocked Bachatt APIs, request/response log
   data/murari.json    the single demo user's fixture
   public/             index.html, app.js, styles.css (vanilla JS)
@@ -44,8 +51,22 @@ ANTHROPIC_API_KEY=... npm start                # Claude-driven agent
 npm run scripted                               # force the deterministic agent
 ```
 
-Use Chrome or Edge for speech recognition. Demo path: Run scan, Start voice agent, then say or tap
-"Haan, boliye", "Abhi paise nahi hain…", "Haan, 50 rupaye kar do".
+Demo path: pick a language, Run tonight's check, Call Murari, Answer, then speak or tap
+"Haan, boliye", "Abhi paise nahi hain…", "Haan, 50 rupaye kar do". Use Chrome and allow the mic.
+
+## Voice pipeline (Sarvam)
+
+- **Speech out:** each line is rendered per language and spoken with `bulbul:v3`, speaker `priya`
+  (override with `SARVAM_SPEAKER`). Hinglish captions are Latin script but the audio is generated from
+  the Devanagari version, which Sarvam pronounces best. Audio is cached in `demo/.cache/tts/`.
+- **Languages other than en/Hinglish/Hindi** are machine-translated from the English line with
+  `mayura:v1` in `modern-colloquial` mode (natural code-mixing) and cached in `demo/.cache/`.
+- **Warm-up:** picking a language pre-translates and pre-records all ~17 lines (about 25 s cold,
+  instant after). Hinglish and Hindi warm up when the server starts.
+- **Speech in:** the browser records until 1.1 s of silence, then `/api/stt` calls `saaras:v3` twice
+  in parallel: `translit`/`transcribe` for the caption and `translate` for an English version that
+  the intent matcher reads. About 0.4 s per turn.
+- If audio can't play, a timeout keeps the call moving, so the demo never freezes.
 
 ## Agent engines
 
@@ -54,8 +75,9 @@ Use Chrome or Edge for speech recognition. Demo path: Run scan, Start voice agen
   server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`).
   On any API error the call switches to the scripted engine mid-call.
 - **Scripted**: regex intent matching over Hinglish/English and a fixed ladder state machine.
-  Deterministic, so the stage demo cannot go off-script. Keep its quick-reply chips in
-  `public/app.js` (`CHIPS`) in sync with the phrases its regexes understand.
+  Deterministic, so the stage demo cannot go off-script. It matches intent on the English translation,
+  asks once more when it can't tell, and never advances the ladder on unclear speech. Reply chips live
+  in `lines.mjs` (`CHIPS`); their `en` text is what the matcher reads.
 
 ## Product rules the agent must follow
 

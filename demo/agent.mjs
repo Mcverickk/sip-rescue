@@ -4,6 +4,8 @@
 //   - "scripted": a deterministic ladder state machine, so the demo always works offline
 import Anthropic from "@anthropic-ai/sdk";
 import { api, fixture } from "./mockApi.mjs";
+import { LINES, SMS, langById } from "./lines.mjs";
+import { render } from "./sarvam.mjs";
 
 const MODEL = process.env.SIP_RESCUE_MODEL || "claude-opus-5";
 const f = fixture;
@@ -71,7 +73,7 @@ function runTool(name, input) {
 
 const SYSTEM = `You are Sia, Bachatt's savings assistant, on a live outbound phone call. Your words are converted to speech, so write exactly what you would say: plain sentences, no lists, no markdown, no emoji.
 
-Language: Hinglish in Latin script (for example "Namaste Murari ji, main Bachatt se Sia bol rahi hoon"). Switch to simple English if the customer speaks English. Say amounts as "500 rupaye", never with the rupee symbol. Keep every turn to one to three short sentences and end with one clear question, except the goodbye.
+Language: speak LANGUAGE_PLACEHOLDER, the way people talk every day, mixing in common English words like SIP, account and balance. For Hinglish use Devanagari script for Hindi words so the voice engine pronounces them well. If the customer switches language, follow them. Say amounts as "500 rupaye", never with the rupee symbol. Keep every turn to one to three short sentences and end with one clear question, except the goodbye.
 
 Why you are calling. It is Monday 13 October 2026, 7 pm.
 - Customer: ${f.user.first_name} from ${f.user.city}. Address him as "${f.user.display_name}".
@@ -107,6 +109,7 @@ export function claudeAvailable() {
 
 async function claudeTurn(session, userText) {
   client ??= new Anthropic();
+  const system = SYSTEM.replace("LANGUAGE_PLACEHOLDER", langById(session.lang).english);
   session.messages.push({ role: "user", content: userText });
   const spoken = [];
   const actions = [];
@@ -117,7 +120,7 @@ async function claudeTurn(session, userText) {
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       output_config: { effort: "low" },
-      system: SYSTEM,
+      system,
       tools: TOOLS,
       messages: session.messages,
     });
@@ -146,105 +149,86 @@ async function claudeTurn(session, userText) {
 }
 
 // ---------------------------------------------------------------------------- scripted engine
+// Deterministic ladder. Intent is read from the English translation of what the customer said
+// (Sarvam STT translate mode), plus the raw text for typed Hinglish.
 
 const RX = {
-  yes: /\b(haan|haa|han|ha|hanji|haanji|ji haan|yes|yeah|yup|ok|okay|theek|thik|sure|kar do|kardo|karo|chalega|bilkul|zaroor|jaroor|done|agree|sahi|accha|achha)\b/i,
-  no: /\b(nahi|nahin|nhi|no|nope|mat|not|mushkil|don'?t|do not|can'?t|cannot|won'?t)\b/i,
-  busy: /\b(busy|baad mein|baad me|later|abhi nahi baat|call back|callback|kal baat)\b/i,
-  wrong: /\b(wrong number|galat number|murari nahi|not murari)\b/i,
-  cancel: /\b(cancel|band kar|bandh|close the sip|stop kar|stop the sip|khatam)/i,
-  pause: /\b(pause|rok|ruk|break|hold)\b/i,
-  reduce: /\b(kam kar|kam karo|kam kardo|amount kam|ghata|reduce|lower|50|pachas|fifty|chhota)\b/i,
-  bank: /\b(bank|account|khata|dusra|doosra|another|other)\b/i,
-  topup: /\b(daal|dal|add|jama|top ?up|transfer|paise|rupaye|deposit)\b/i,
+  yes: /\b(haan|haa|han|hanji|haanji|ji haan|yes|yeah|yep|yup|ok|okay|theek|thik|sure|kar do|kardo|karo|chalega|bilkul|zaroor|jaroor|done|agree|sahi|accha|achha|go ahead|tell me|speak|please do|alright|of course|fine|will add|i will|i'll|हाँ|हां|ठीक)\b/i,
+  no: /\b(nahi|nahin|nhi|no|nope|mat|not|mushkil|don'?t|do not|can'?t|cannot|won'?t|unable|नहीं)\b/i,
+  busy: /\b(busy|baad mein|baad me|later|call back|callback|call me tomorrow|kal baat|not a good time)\b/i,
+  wrong: /\b(wrong number|galat number|not murari|murari nahi)\b/i,
+  cancel: /\b(cancel|band kar|bandh|close the sip|stop the sip|stop my sip|stop sip|stop it|khatam|बंद)/i,
+  pause: /\b(pause|rok|ruk|break|hold|रोक)/i,
+  reduce: /\b(kam kar|kam karo|kam kardo|amount kam|ghata|reduce|lower|decrease|50|pachas|fifty|chhota)\b/i,
+  bank: /\b(bank|account|khata|dusra|doosra|another|other|sbi|hdfc|icici|axis|kotak|अकाउंट)\b/i,
+  topup: /\b(daal|dal|add|jama|top ?up|transfer|deposit|put money)\b/i,
 };
-const days = (t) => (/\b30|tees|thirty|mahina|month\b/i.test(t) ? 30 : /\b7\b|saat|seven|hafta|week/i.test(t) ? 7 : 15);
+const pauseDays = (t) => (/\b(30|thirty|tees|month|mahina)\b/i.test(t) ? 30 : /\b(7|seven|saat|week|hafta)\b/i.test(t) ? 7 : 15);
 
-const L = {
-  hello: `Namaste ${f.user.display_name}, main Bachatt se Sia bol rahi hoon, aapke Smart Deposit savings ke baare mein. Kya abhi do minute baat kar sakte hain?`,
-  explain: `Shukriya. Aapka 100 rupaye ka roz ka SIP pichhle do din, 12 aur 13 October ko, ${f.bank.name} account mein kam balance ki wajah se fail hua. Koi penalty nahi lagti, bas us din ki bachat chhoot jaati hai. Kal subah phir 100 rupaye katenge, aur abhi balance sirf 149 rupaye dikh raha hai. Kya aap aaj raat account ending ${f.bank.acct_last4} mein kam se kam 500 rupaye daal sakte hain?`,
-  offerReduce: `Koi baat nahi. Toh kya hum aapka SIP 100 se ghata kar 50 rupaye roz kar dein? Bachat chalti rahegi aur debit fail nahi hoga.`,
-  offerBank: `Samajh gayi. Kya aap kisi doosre bank account mein paise rakhte hain? Main ek link bhej sakti hoon jisse AutoPay us account par shift ho jaaye.`,
-  offerPause: `Theek hai. Toh kya hum SIP ko 15 din ke liye pause kar dein? Woh apne aap 29 October se phir shuru ho jaayega. Aap chahein toh 7 ya 30 din bhi kar sakte hain.`,
-  cancelPushback: `Main samajh sakti hoon. Band karne ki jagah hum ise 15 din ke liye pause kar sakte hain, aapke paise invested rahenge aur baad mein bina kisi jhanjhat ke shuru ho jaayega. Kya pause kar dein?`,
-};
-
-function scripted(session, text) {
-  const t = (text || "").toLowerCase();
-  const out = [];
-  const act = (tool, input) => {
-    const result = runTool(tool, input);
-    session.actionsThisTurn.push({ tool, input, result });
-    return result;
-  };
-  const finish = (line, outcome, summary) => {
-    out.push(line);
-    act("end_call", { outcome, summary });
-    session.ended = true;
-  };
-  session.actionsThisTurn = [];
+function decide(session, raw, english) {
+  const t = `${english || ""} | ${raw || ""}`.toLowerCase();
   const s = session.stage;
+  const act = [];
+  const end = (line, outcome, summary, extra = []) => ({ line, act: [...extra, ["end_call", { outcome, summary }]], ended: true });
 
-  if (s === "start") { session.stage = "consent"; return L.hello; }
-  if (RX.wrong.test(t)) { finish("Maaf kijiye, galat number lag gaya. Aapka din shubh ho.", "WRONG_PERSON", "Wrong person picked up."); return out.join(" "); }
-  if (RX.busy.test(t) && !/\bnahi\b.*\bbusy\b/.test(t)) {
-    act("schedule_callback", { when: "tomorrow 19:00" });
-    finish("Bilkul, main kal shaam 7 baje phir call karti hoon. Dhanyavaad Murari ji.", "CALLBACK_SCHEDULED", "Customer was busy; callback scheduled for tomorrow 19:00.");
-    return out.join(" ");
-  }
+  if (s === "start") { session.stage = "consent"; return { line: "hello", act }; }
+  if (RX.wrong.test(t)) return end("wrong_person", "WRONG_PERSON", "Wrong person picked up.");
+  if (RX.busy.test(t) && s === "consent") return end("busy", "CALLBACK_SCHEDULED", "Customer was busy; callback scheduled for tomorrow 19:00.", [["schedule_callback", { when: "tomorrow 19:00" }]]);
+
   if (RX.cancel.test(t)) {
-    if (session.cancelAsked) {
-      act("cancel_sip", { reason: "Customer insisted on cancelling after a pause was offered." });
-      finish("Theek hai, maine aapka SIP band kar diya hai. Aapke invested paise surakshit rahenge, SMS se confirmation aa jaayega. Dhanyavaad Murari ji.", "SIP_CANCELLED", "Customer insisted on cancelling after being offered a pause.");
-      return out.join(" ");
-    }
-    session.cancelAsked = true; session.stage = "pause"; return L.cancelPushback;
+    if (session.cancelAsked) return end("cancel_yes", "SIP_CANCELLED", "Customer insisted on cancelling after being offered a pause.", [["cancel_sip", { reason: "Customer insisted after a pause was offered" }, "cancel"]]);
+    session.cancelAsked = true; session.stage = "pause"; return { line: "cancel_pushback", act };
   }
-  // direct jumps to a later ladder option
-  if (s !== "consent" && RX.pause.test(t) && !RX.no.test(t)) session.stage = "pause";
-  if (s !== "consent" && RX.reduce.test(t) && !RX.no.test(t) && s !== "reduce" && s !== "pause") { session.stage = "reduce"; }
-
-  const yes = RX.yes.test(t) && !RX.no.test(t);
-  const no = !yes && (RX.no.test(t) || /mushkil|paise nahi|nahi hai|nahi hain|can't|cannot/.test(t));
+  const no = RX.no.test(t);
+  const yes = RX.yes.test(t) && !no;
+  if (s !== "consent" && RX.pause.test(t) && !no) session.stage = "pause";
+  else if (s !== "consent" && s !== "pause" && RX.reduce.test(t) && !no && !/\b500\b/.test(t)) session.stage = "reduce";
 
   switch (session.stage) {
     case "consent":
-      if (no && !/\bbaat\b/.test(t)) { act("schedule_callback", { when: "tomorrow 19:00" }); finish("Koi baat nahi, main kal shaam 7 baje call karti hoon. Dhanyavaad.", "CALLBACK_SCHEDULED", "Customer could not talk; callback scheduled."); return out.join(" "); }
-      session.stage = "topup"; return L.explain;
+      if (no && !yes && !/\bbaat\b|talk/.test(t)) return end("busy", "CALLBACK_SCHEDULED", "Customer could not talk; callback scheduled.", [["schedule_callback", { when: "tomorrow 19:00" }]]);
+      session.stage = "topup"; session.unclearCount = 0; return { line: "explain", act };
     case "topup":
-      if (yes || (RX.topup.test(t) && !no)) {
-        act("send_topup_link", { amount_inr: 500 });
-        finish("Bahut badhiya! Maine aapko SMS par ek link bhej diya hai, aaj raat 500 rupaye daal dijiye. Kal subah ka debit hum check kar lenge. Dhanyavaad Murari ji, aapka din shubh ho.", "TOPUP_COMMITTED", "Customer agreed to add 500 rupees tonight; top-up link sent.");
-        return out.join(" ");
-      }
-      session.stage = "reduce"; return L.offerReduce;
+      if (yes || (RX.topup.test(t) && !no)) return end("topup_yes", "TOPUP_COMMITTED", "Customer agreed to add 500 rupees tonight; top-up link sent.", [["send_topup_link", { amount_inr: 500 }, "topup"]]);
+      if (!no && session.unclearCount < 1) { session.unclearCount++; return { line: "unclear", act }; }
+      session.stage = "reduce"; session.unclearCount = 0; return { line: "offer_reduce", act };
     case "reduce":
-      if (yes || (RX.reduce.test(t) && !no)) {
-        const amt = /\b(70|75|80)\b/.exec(t)?.[1] ?? 50;
-        act("reduce_sip_amount", { new_amount_inr: Number(amt) });
-        finish(`Ho gaya! Kal se aapka SIP ${amt} rupaye roz ka hai. SMS se confirmation aa jaayega. Dhanyavaad Murari ji, bachat jaari rakhiye.`, "SIP_REDUCED", `Customer agreed to reduce the daily SIP from 100 to ${amt} rupees.`);
-        return out.join(" ");
-      }
-      session.stage = "bank"; return L.offerBank;
+      if (yes || (RX.reduce.test(t) && !no)) return end("reduce_yes", "SIP_REDUCED", "Customer agreed to lower the daily SIP from 100 to 50 rupees.", [["reduce_sip_amount", { new_amount_inr: 50 }, "reduce"]]);
+      if (!no && session.unclearCount < 1) { session.unclearCount++; return { line: "unclear", act }; }
+      session.stage = "bank"; session.unclearCount = 0; return { line: "offer_bank", act };
     case "bank":
-      if (yes || (RX.bank.test(t) && !no)) {
-        act("change_bank_account", {});
-        finish("Maine SMS par link bhej diya hai. Usse kholkar naye account par UPI AutoPay approve kar dijiye, tab tak purana SIP chalta rahega. Dhanyavaad Murari ji.", "BANK_CHANGE_LINK_SENT", "Customer will move the AutoPay mandate to another bank; link sent.");
-        return out.join(" ");
+      if (yes) return end("bank_yes", "BANK_CHANGE_LINK_SENT", "Customer will move AutoPay to another bank; link sent.", [["change_bank_account", {}, "bank"]]);
+      if (!no && session.unclearCount < 1) { session.unclearCount++; return { line: "unclear", act }; }
+      session.stage = "pause"; session.unclearCount = 0; return { line: "offer_pause", act };
+    case "pause": {
+      if (yes || (RX.pause.test(t) && !no) || /\b(7|15|30)\b/.test(t) && !no) {
+        const d = pauseDays(t);
+        return end(`pause_${d}`, "SIP_PAUSED", `Customer chose to pause the SIP for ${d} days.`, [["pause_sip", { days: d }, `pause_${d}`]]);
       }
-      session.stage = "pause"; return L.offerPause;
-    case "pause":
-      if (yes || RX.pause.test(t) || /\b(7|15|30)\b/.test(t)) {
-        const d = days(t);
-        const r = act("pause_sip", { days: d });
-        finish(`Theek hai, aapka SIP ${d} din ke liye pause kar diya hai, ${r.resumes_on} se apne aap shuru hoga. SMS se confirmation aa jaayega. Dhanyavaad Murari ji.`, "SIP_PAUSED", `Customer chose to pause the SIP for ${d} days.`);
-        return out.join(" ");
-      }
-      finish("Koi baat nahi, aapka SIP jaisa hai waisa chalta rahega. Koi bhi badlav app mein kabhi bhi kar sakte hain. Dhanyavaad Murari ji.", "NO_CHANGE", "Customer declined every option; SIP continues unchanged.");
-      return out.join(" ");
-    default:
-      return "Ji, main sun rahi hoon.";
+      if (!no && session.unclearCount < 1) { session.unclearCount++; return { line: "unclear", act }; }
+      return end("no_change", "NO_CHANGE", "Customer declined every option; SIP continues unchanged.");
+    }
   }
+  return { line: "unclear", act };
+}
+
+const STAGE_OF_LINE = { hello: "start", explain: "topup", offer_reduce: "reduce", offer_bank: "bank", offer_pause: "pause", cancel_pushback: "pause" };
+
+async function scriptedTurn(session, raw, english) {
+  const prevStage = session.stage;
+  const d = decide(session, raw, english);
+  const actions = [];
+  for (const [tool, input, smsKey] of d.act) {
+    const args = { ...input };
+    if (smsKey && SMS[smsKey]) args._sms = (await render(SMS[smsKey], session.lang)).text;
+    const result = runTool(tool, args);
+    actions.push({ tool, input, result });
+  }
+  if (d.ended) session.ended = true;
+  const r = await render(LINES[d.line], session.lang);
+  const offer = d.line === "unclear" ? session.lastOffer : STAGE_OF_LINE[d.line] ?? null;
+  if (offer) session.lastOffer = offer;
+  return { say: r.text, speak: r.speak, actions, ended: session.ended, offer: session.ended ? null : offer, lineId: d.line, prevStage };
 }
 
 // ---------------------------------------------------------------------------- sessions
@@ -255,18 +239,18 @@ export function engineName() {
   return claudeAvailable() ? `Claude (${MODEL})` : "Scripted";
 }
 
-export async function startCall() {
-  session = { messages: [], stage: "start", ended: false, engine: claudeAvailable() ? "claude" : "scripted" };
-  return turn("Hello?");
+export async function startCall(lang = "hinglish") {
+  session = { messages: [], stage: "start", ended: false, lang, unclearCount: 0, engine: claudeAvailable() ? "claude" : "scripted" };
+  return turn("Hello?", "Hello?");
 }
 
-export async function turn(text) {
+export async function turn(text, english) {
   if (!session) throw new Error("No active call. Start a call first.");
   if (session.ended) return { say: "", actions: [], ended: true, engine: session.engine };
   if (session.engine === "claude") {
     try {
       const r = await claudeTurn(session, text);
-      return { ...r, engine: session.engine };
+      return { ...r, speak: r.say, engine: session.engine };
     } catch (err) {
       console.error("[agent] Claude error, switching this call to the scripted engine:", err.message);
       session.engine = "scripted";
@@ -274,9 +258,11 @@ export async function turn(text) {
       session.fallbackReason = err.message;
     }
   }
-  const say = scripted(session, text);
-  return { say, actions: session.actionsThisTurn ?? [], ended: session.ended, engine: session.engine, fallbackReason: session.fallbackReason };
+  const r = await scriptedTurn(session, text, english);
+  return { ...r, engine: session.engine, fallbackReason: session.fallbackReason };
 }
+
+export function currentLang() { return session?.lang ?? "hinglish"; }
 
 export function endCallManually() {
   if (session && !session.ended) {

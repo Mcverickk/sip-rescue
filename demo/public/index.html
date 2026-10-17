@@ -5,149 +5,232 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SIP Rescue</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Baloo+Bhai+2:wght@500;700&family=Baloo+Bhaina+2:wght@500;700&family=Baloo+Chettan+2:wght@500;700&family=Baloo+Da+2:wght@500;700&family=Baloo+Paaji+2:wght@500;700&family=Baloo+Tamma+2:wght@500;700&family=Baloo+Tammudu+2:wght@500;700&family=Baloo+Thambi+2:wght@500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <header class="top">
     <div class="brand">
-      <div class="logo">₹</div>
+      <img class="brand-coin" data-gif="1fa99" data-emoji="🪙" alt="" />
       <div>
-        <div class="title">SIP Rescue</div>
-        <div class="sub">Catch tomorrow's failed SIP debit tonight</div>
+        <div class="brand-name">SIP Rescue</div>
+        <div class="brand-tag">Saving tomorrow's savings, tonight</div>
       </div>
     </div>
-    <div class="top-right">
-      <div class="clock" id="clock">Mon 13 Oct 2026 · 19:00 IST</div>
-      <span class="pill" id="engine">engine</span>
-      <button class="ghost" id="resetBtn">Reset demo</button>
+
+    <ol class="acts" id="acts">
+      <li class="act on" data-act="1"><span class="act-dot">1</span>Tonight's check</li>
+      <li class="act" data-act="2"><span class="act-dot">2</span>Sia calls Murari</li>
+      <li class="act" data-act="3"><span class="act-dot">3</span>Savings rescued</li>
+    </ol>
+
+    <div class="top-tools">
+      <span class="tag" id="voiceTag" title="Speech engine">Voice</span>
+      <span class="tag" id="brainTag" title="Conversation engine">Brain</span>
+      <button class="link-btn" id="resetBtn">Start over</button>
     </div>
   </header>
 
-  <main class="grid">
-    <!-- 1. Nightly scan -->
-    <section class="panel" id="scanPanel">
-      <div class="panel-head">
-        <h2><span class="num">1</span> 19:00 nightly scan</h2>
-        <button id="scanBtn" class="primary sm">Run scan</button>
-      </div>
-      <div class="scan-intro" id="scanIntro">
-        The job scans every SIP debiting tomorrow. <b>1,381 plans</b> are due on 14 Oct.
-        For this demo we follow one investor through it.
+  <div class="lang-bar">
+    <span class="lang-q">Sia speaks</span>
+    <div class="langs" id="langs"></div>
+  </div>
+
+  <main class="stage">
+    <!-- Act 1: the story of Murari and tonight's check -->
+    <section class="story" id="story">
+      <div class="who">
+        <div class="who-face">👳🏽‍♂️</div>
+        <div>
+          <h1>Murari</h1>
+          <p class="who-where">Pali, Rajasthan</p>
+        </div>
+        <div class="habit">
+          <img data-gif="1fa99" data-emoji="🪙" alt="" />
+          <div><b>₹100</b> saved<br />every day</div>
+        </div>
       </div>
 
-      <ol class="steps" id="steps">
-        <li class="step" data-step="1">
-          <div class="step-title">SIP debiting tomorrow</div>
-          <div class="step-body">
-            <div class="person">
-              <div class="avatar">M</div>
-              <div><b id="custName">Murari</b><div class="muted" id="custMeta">Pali, Rajasthan · 94XXXXX927</div></div>
-            </div>
-            <div class="kv"><span>Plan</span><b id="sipLine">Smart Deposit · ₹100 daily</b></div>
-            <div class="kv"><span>Next debit</span><b>Tue 14 Oct, morning</b></div>
-            <div class="kv"><span>Pre-debit notice</span><b>Sent 13 Oct 09:17</b></div>
+      <button class="big-btn marigold" id="checkBtn">
+        <img data-gif="1f50d" data-emoji="🔍" alt="" class="btn-gif" hidden />Run tonight's check
+      </button>
+
+      <div class="reveal" data-step="1">
+        <div class="reveal-row">
+          <img class="r-gif" data-gif="23f0" data-emoji="⏰" alt="" />
+          <div>
+            <h3>Tomorrow, 8 am</h3>
+            <p>₹100 will be taken from his Bank of Baroda account for his Smart Deposit savings.</p>
           </div>
-        </li>
-        <li class="step" data-step="2">
-          <div class="step-title">Balance from bank SMS</div>
-          <div class="step-body">
-            <div class="sms"><div class="sms-from">JK-BOBSMS-S · 12 Oct 14:13</div><div id="smsBody"></div></div>
-            <div class="kv"><span>Mandate account</span><b>Bank of Baroda ·· 9428</b></div>
-            <div class="kv"><span>Latest balance</span><b class="bad">₹149.54</b></div>
-            <div class="kv"><span>Bank min-balance floor</span><b>₹500</b></div>
+        </div>
+      </div>
+
+      <div class="reveal" data-step="2">
+        <h3 class="r-title">Money in his account right now</h3>
+        <div class="gauge-wrap">
+          <svg class="gauge" viewBox="0 0 220 128" aria-label="Balance ₹149 of the ₹500 needed">
+            <path d="M20 112 A90 90 0 0 1 200 112" class="g-track" />
+            <path d="M20 112 A90 90 0 0 1 200 112" class="g-safe" pathLength="100" />
+            <path d="M20 112 A90 90 0 0 1 200 112" class="g-fill" pathLength="100" id="gFill" />
+            <g id="needle" class="needle"><line x1="110" y1="112" x2="110" y2="36" /><circle cx="110" cy="112" r="7" /></g>
+          </svg>
+          <div class="gauge-num"><b>₹149</b><span>needs ₹500 to be safe</span></div>
+        </div>
+        <div class="sms-mini">
+          <span class="sms-mini-from">Bank of Baroda SMS, 12 Oct</span>
+          …Cr. to 9919722738@ybl. <mark>AvlBal:Rs149.54</mark>
+        </div>
+      </div>
+
+      <div class="reveal" data-step="3">
+        <h3 class="r-title">His last few savings days</h3>
+        <div class="days" id="days"></div>
+        <p class="note">Two misses in a row, both for low balance.</p>
+      </div>
+
+      <div class="reveal verdict" data-step="4">
+        <img class="r-gif" data-gif="1f6a8" data-emoji="🚨" alt="" />
+        <div>
+          <h3>Tomorrow's ₹100 will likely bounce</h3>
+          <p>Sia, our voice assistant, will call Murari now and help him keep saving.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Act 2: the phone call (hero) -->
+    <section class="call-col">
+      <div class="phone" id="phone" data-phase="lock">
+        <div class="sky"><div class="stars"></div><div class="moon"></div></div>
+        <div class="notch"></div>
+
+        <!-- lock screen -->
+        <div class="screen lock">
+          <div class="lock-time">19:00</div>
+          <div class="lock-date">Monday, 13 October</div>
+          <div class="notif">
+            <div class="notif-app">🏦 Bank of Baroda <span>now</span></div>
+            Rs.63.00 debited from A/C XX9428. AvlBal: Rs149.54
           </div>
-        </li>
-        <li class="step" data-step="3">
-          <div class="step-title">Debit history</div>
-          <div class="step-body">
-            <div class="history" id="history"></div>
-            <div class="muted small">Two bounces in a row, even with ₹270 and ₹212 in the account.</div>
+        </div>
+
+        <!-- incoming call -->
+        <div class="screen incoming">
+          <div class="caller-ring"><div class="caller-av">S</div></div>
+          <div class="caller-name">Sia from Bachatt</div>
+          <div class="caller-sub">is calling Murari…</div>
+          <div class="answer-row">
+            <button class="round decline" id="declineBtn" aria-label="Decline">✕</button>
+            <button class="round accept" id="answerBtn" aria-label="Answer">
+              <svg viewBox="0 0 24 24" width="30" height="30"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.6a1 1 0 0 1-.25 1l-2.2 2.2Z"/></svg>
+            </button>
           </div>
-        </li>
-        <li class="step decision" data-step="4">
-          <div class="step-title">Decision</div>
-          <div class="step-body">
-            <div class="badge conv">CONVERSATION CALL</div>
-            <div class="small" id="decisionReason"></div>
-            <button id="startBtn" class="primary wide" disabled>Start voice agent</button>
+          <div class="answer-hint">Answer as Murari</div>
+        </div>
+
+        <!-- in call -->
+        <div class="screen incall">
+          <div class="call-head">
+            <span class="live-dot"></span><span id="callLang">Hinglish</span>
+            <span class="call-time" id="callTime">0:00</span>
           </div>
-        </li>
+          <div class="sia" id="sia">
+            <div class="sia-glow" id="siaGlow"></div>
+            <img class="sia-face" id="siaFace" data-gif="1f60a" data-emoji="😊" alt="Sia" />
+          </div>
+          <div class="sia-name">Sia</div>
+          <div class="bars" id="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+          <div class="captions" id="captions">
+            <div class="cap-sia" id="capSia"></div>
+            <div class="cap-you" id="capYou"></div>
+          </div>
+
+          <div class="chips" id="chips"></div>
+
+          <div class="call-controls">
+            <button class="mic-btn" id="micBtn" aria-label="Speak">
+              <svg viewBox="0 0 24 24" width="30" height="30"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg>
+            </button>
+            <button class="round small decline" id="hangBtn" aria-label="End call">
+              <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" transform="rotate(135 12 12)" d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.6a1 1 0 0 1-.25 1l-2.2 2.2Z"/></svg>
+            </button>
+          </div>
+          <div class="mic-hint" id="micHint">Tap the mic and speak, or tap a reply</div>
+        </div>
+
+        <!-- ended -->
+        <div class="screen ended">
+          <img class="ended-gif" data-gif="1f64f" data-emoji="🙏" alt="" />
+          <div class="caller-name">Call ended</div>
+          <div class="caller-sub" id="endedTime"></div>
+        </div>
+      </div>
+
+      <button class="big-btn green" id="callBtn" hidden>
+        <img data-gif="1f4ac" data-emoji="💬" alt="" class="btn-gif" />Call Murari
+      </button>
+
+      <ol class="plan-steps" id="ladder" aria-label="Sia's plan for the call">
+        <li data-rung="topup"><span>💰</span>Add money</li>
+        <li data-rung="reduce"><span>📉</span>Save less</li>
+        <li data-rung="bank"><span>🏦</span>Other bank</li>
+        <li data-rung="pause"><span>⏸️</span>Short break</li>
       </ol>
     </section>
 
-    <!-- 2. Voice agent -->
-    <section class="panel call" id="callPanel">
-      <div class="panel-head">
-        <h2><span class="num">2</span> Voice agent</h2>
-        <span class="call-status" id="callStatus">idle</span>
+    <!-- Act 3: what changed -->
+    <section class="changes">
+      <h2>What changed for Murari</h2>
+
+      <div class="plan-card" id="planCard">
+        <div class="plan-label">His daily saving</div>
+        <div class="plan-amounts">
+          <span class="amt old" id="amtOld">₹100</span>
+          <span class="amt new" id="amtNew" hidden></span>
+        </div>
+        <div class="plan-status" id="planStatus">Active, next debit tomorrow 8 am</div>
       </div>
 
-      <div class="phone">
-        <div class="phone-top">
-          <div class="agent-av" id="agentAv"><div class="ring"></div><span>S</span></div>
-          <div>
-            <div class="agent-name">Sia · Bachatt</div>
-            <div class="muted small" id="callSub">calling Murari ji · 94XXXXX927</div>
-          </div>
-          <div class="timer" id="timer">00:00</div>
-        </div>
-
-        <div class="ladder" id="ladder">
-          <div class="rung" data-rung="topup">1 · Top up</div>
-          <div class="rung" data-rung="reduce">2 · Lower amount</div>
-          <div class="rung" data-rung="bank">3 · Change bank</div>
-          <div class="rung" data-rung="pause">4 · Pause</div>
-        </div>
-
-        <div class="transcript" id="transcript">
-          <div class="empty">Run the scan, then start the voice agent. Speak in Hindi, English or Hinglish, or tap a reply below.</div>
-        </div>
-
-        <div class="chips" id="chips"></div>
-
-        <div class="controls">
-          <button class="mic" id="micBtn" disabled title="Hold the conversation by voice">
-            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg>
-          </button>
-          <form id="textForm" class="text-form">
-            <input id="textIn" placeholder="Type what Murari says…" autocomplete="off" disabled />
-            <button class="primary sm" id="sendBtn" disabled>Send</button>
-          </form>
-          <button class="danger sm" id="endBtn" disabled>End</button>
-        </div>
-        <div class="voice-row">
-          <label><input type="checkbox" id="handsFree" checked /> Hands-free listening</label>
-          <label><input type="checkbox" id="speakOut" checked /> Speak replies</label>
-          <select id="voiceSel" title="Agent voice"></select>
+      <div class="actions" id="actions">
+        <div class="empty">
+          <img data-gif="2728" data-emoji="✨" alt="" />
+          <p>When Sia helps Murari during the call, it shows up here.</p>
         </div>
       </div>
-    </section>
 
-    <!-- 3. Mocked APIs -->
-    <section class="panel" id="apiPanel">
-      <div class="panel-head">
-        <h2><span class="num">3</span> Bachatt internal APIs <span class="mock">mocked</span></h2>
+      <div class="sms-phone" id="smsPhone" hidden>
+        <div class="sms-phone-head">Messages · Bachatt</div>
+        <div class="sms-bubbles" id="smsBubbles"></div>
       </div>
 
-      <div class="sub-head">sip_plans · user 1752215809777244</div>
-      <div id="plans" class="plans"></div>
-
-      <div class="sub-head">SMS sent to customer</div>
-      <div id="smsOut" class="sms-out"><div class="muted small">None yet</div></div>
-
-      <div class="sub-head">API calls</div>
-      <div id="log" class="log"><div class="muted small">The agent's tool calls appear here with full request and response.</div></div>
+      <details class="tech" id="tech">
+        <summary>See the system calls behind this</summary>
+        <div id="log" class="log"></div>
+      </details>
     </section>
   </main>
 
-  <div class="outcome" id="outcome" hidden>
-    <div class="outcome-card">
-      <div class="outcome-label">Call outcome</div>
-      <div class="outcome-title" id="outcomeTitle"></div>
-      <div class="outcome-sum" id="outcomeSum"></div>
-      <div class="outcome-stats" id="outcomeStats"></div>
-      <button class="ghost" id="outcomeClose">Close</button>
+  <!-- getting a language ready -->
+  <div class="overlay" id="prep" hidden>
+    <div class="prep-card">
+      <img data-gif="1f9e0" data-emoji="🧠" alt="" />
+      <h2 id="prepTitle">Getting Sia ready</h2>
+      <div class="prep-bar"><i id="prepFill"></i></div>
+      <p class="note" id="prepNote">Translating her script and recording her voice</p>
+    </div>
+  </div>
+
+  <!-- celebration -->
+  <div class="overlay" id="celebrate" hidden>
+    <div class="confetti" id="confetti"></div>
+    <div class="cel-card">
+      <img class="cel-gif" id="celGif" data-gif="1f973" data-emoji="🥳" alt="" />
+      <h2 id="celTitle"></h2>
+      <p id="celText"></p>
+      <div class="cel-tomorrow" id="celTomorrow"></div>
+      <div class="cel-stats" id="celStats"></div>
+      <button class="big-btn green" id="celClose">Done</button>
     </div>
   </div>
 
