@@ -21,8 +21,12 @@ The goal is a working, presentable demo, not production. Decisions already made:
   Marathi, Tamil, Telugu, Gujarati, Kannada, Malayalam, Punjabi, Odia). She opens in Hindi.
 - **Fast, short, warm.** Replies are one or two short sentences, streamed and voiced sentence by
   sentence. Optimise for natural conversation and conversion.
-- **Non-technical audience.** Three-act story UI with animated Noto emoji GIFs. Technical JSON
-  stays behind a "system calls" toggle.
+- **Visual design.** Dark premium fintech UI: deep navy ground (#070A12), glassy cards, a
+  cyan-to-blue-to-violet accent gradient, Inter + JetBrains Mono. No emoji or illustration;
+  hierarchy comes from type, spacing and color. Three columns: investor panel (profile, tonight's
+  check, live transcript) / phone mockup (lock, incoming call, live call, ended) / "what changed"
+  (SIP stat card, the 4-step ladder with ASKING/DECLINED/AGREED tags, SMS, collapsible system log).
+  Header has a 3-step tracker; raw request/response JSON stays collapsed inside each log row.
 
 ## Layout
 
