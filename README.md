@@ -21,7 +21,11 @@ cd demo && npm install && npm start
 
 Open http://localhost:5173 in Chrome and allow the microphone. Murari speaks in any Indian
 language: Sarvam detects it and transcribes, Claude decides what to say and do, and Sarvam speaks
-the reply in the same language. Claude credentials go in `demo/.env.local` (see `CLAUDE.md`).
+the reply in the same language. Claude credentials go in `demo/.env.local`.
+
+See [`CLAUDE.md`](CLAUDE.md) for the product/decisions context and
+[`demo/README.md`](demo/README.md) for the technical map of the demo app (file layout, the
+request flow for one conversational turn, env vars, and how to debug a turn with `curl` alone).
 
 ## Layout
 

@@ -5,8 +5,7 @@
   "type": "module",
   "description": "SIP Rescue hackathon demo: browser voice agent with mocked Bachatt APIs",
   "scripts": {
-    "start": "node server.mjs",
-    "scripted": "SIP_RESCUE_ENGINE=scripted node server.mjs"
+    "start": "node server.mjs"
   },
   "engines": { "node": ">=20" },
   "dependencies": {

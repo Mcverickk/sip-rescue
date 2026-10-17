@@ -8,6 +8,11 @@ an AI voice agent talks to the user.
 Full design, data review and the original task split: `docs/DESIGN.md`
 (team copy: https://claude.ai/code/artifact/197c6eac-ba17-453e-87f5-7b1cb98872bd).
 
+**If you're about to touch code in `demo/`, read [`demo/README.md`](demo/README.md) first** — it
+has the file-by-file map, the exact request flow for one conversational turn, env var table, and
+a curl-only way to debug a turn without a browser. This file (root `CLAUDE.md`) is the product
+and decisions context; `demo/README.md` is the technical map.
+
 ## Current scope: demo only
 
 The goal is a working, presentable demo, not production. Decisions already made:
@@ -81,9 +86,11 @@ Measured with Claude Opus 5 at low effort: first audio of a reply arrives 1.2 to
 stops talking (Sarvam STT ~0.5 s, Claude first sentence ~1.5 s, Sarvam TTS of a short opener
 ~0.5 s). Each reply opens with a two-to-five-word sentence so the first audio is quick.
 
-Voices (`sarvam.mjs`): `ishita_enhi_customer` for Hindi/Hinglish, `simran_en_conversation`,
-`roopa_bn_conversational`, `pooja_gu_customer`, `chaitra_kn_conversation`, `kavitha_te_conversation`,
-`anand_pa_customer`; Tamil, Malayalam, Marathi and Odia use `bulbul:v3` `priya`.
+Voices are picked per language in `sarvam.mjs`'s `VOICES` map (`bulbul:v4-flash` with a named
+persona for Hindi/Hinglish, English, Bengali, Gujarati, Kannada, Telugu, Punjabi; everything else
+— Tamil, Malayalam, Marathi, Odia — falls back to `bulbul:v3` `priya`, the only voice v4-flash
+doesn't yet cover well for those languages). Check that map directly rather than trusting this
+list if you're adding a language — it's the kind of thing that drifts.
 
 ## Product rules the agent follows (in the system prompt)
 
